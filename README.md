@@ -1,3 +1,23 @@
+---
+title: Reddit Dashboard
+emoji: 📊
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+fullWidth: true
+header: mini
+---
+
+## Access protection
+
+To protect the dashboard with a login and password, set runtime variables in your hosting platform:
+
+- `APP_USERNAME`
+- `APP_PASSWORD`
+
+For Hugging Face Spaces, open `Settings` → `Variables and secrets` and add these values there.
+
 # 🤖 Universal Reddit Scraper Suite
 
 [![Docker Build & Publish](https://github.com/ksanjeev284/reddit-universal-scraper/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/ksanjeev284/reddit-universal-scraper/actions/workflows/docker-publish.yml)

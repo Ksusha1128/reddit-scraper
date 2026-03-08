@@ -16,6 +16,7 @@ if _PROJECT_ROOT not in sys.path:
 
 import html as html_mod
 import io
+import os
 import re
 from datetime import datetime, timedelta
 
@@ -39,6 +40,7 @@ from src.models import AppConfig, AppNiche  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "reviews"
 CSV_FILE = DATA_DIR / "all_reviews.csv"
+LOGO_URL = "https://i.imgur.com/yv0QF5T.png"
 
 NICHE_RU: dict[AppNiche, str] = {
     AppNiche.COUPLE: "💑 Пары и отношения",
@@ -186,8 +188,124 @@ mark { background-color: #3d3a1a; color: #ff9830; padding: 0 2px; border-radius:
 ::-webkit-scrollbar-track { background:var(--g-bg-canvas); }
 ::-webkit-scrollbar-thumb { background:var(--g-border); border-radius:3px; }
 [data-testid="stButton"] button[kind="secondary"] { min-height:0; padding:0.2rem 0.5rem; }
+.filter-row-top [data-testid="column"] {
+    min-width: 0 !important;
+}
+.filter-row-top div[data-baseweb="select"] > div,
+.filter-row-top input {
+    min-height: 30px !important;
+}
+.single-date-popover button[kind="secondary"] {
+    white-space: nowrap !important;
+}
+.single-date-popover [data-testid="stPopover"] {
+    width: 100%;
+}
+.appbar {
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin:0 0 8px 0;
+    padding:0 0 10px 0;
+    border-bottom:1px solid var(--g-border);
+}
+.appbar-logo {
+    width:38px;
+    height:38px;
+    border-radius:10px;
+    object-fit:cover;
+    flex:0 0 auto;
+}
+.appbar-copy {
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+}
+.appbar-title {
+    font-size:1rem;
+    font-weight:700;
+    line-height:1.1;
+    color:var(--g-text-primary);
+}
+.appbar-subtitle {
+    font-size:.68rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--g-text-secondary);
+    margin-top:2px;
+}
+.auth-wrap {
+    max-width: 440px;
+    margin: 7vh auto 0 auto;
+    padding: 22px;
+    background: var(--g-bg-primary);
+    border: 1px solid var(--g-border);
+    border-radius: 12px;
+}
+.auth-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--g-text-primary);
+    margin-bottom: 4px;
+}
+.auth-subtitle {
+    font-size: .8rem;
+    color: var(--g-text-secondary);
+    margin-bottom: 16px;
+}
 </style>
 """
+
+
+def _get_auth_config() -> tuple[str | None, str | None]:
+    username = os.getenv("APP_USERNAME", "parsernext")
+    password = os.getenv("APP_PASSWORD", "parsernextteam")
+
+    try:
+        secrets_section = st.secrets.get("auth", {})
+        username = secrets_section.get("username", username)
+        password = secrets_section.get("password", password)
+    except Exception:
+        pass
+
+    return username, password
+
+
+def _check_auth() -> bool:
+    expected_username, expected_password = _get_auth_config()
+    if not expected_username or not expected_password:
+        return True
+
+    if st.session_state.get("auth_ok") is True:
+        return True
+
+    st.markdown(_CSS, unsafe_allow_html=True)
+    st.markdown(
+        f'''<div class="auth-wrap">
+            <div class="appbar" style="border-bottom:none;margin-bottom:14px;padding-bottom:0;">
+                <img class="appbar-logo" src="{LOGO_URL}" alt="Next logo" />
+                <div class="appbar-copy">
+                    <div class="auth-title">Next Reddit Parser</div>
+                    <div class="auth-subtitle">Sign in to access the dashboard</div>
+                </div>
+            </div>
+        </div>''',
+        unsafe_allow_html=True,
+    )
+
+    with st.container():
+        username = st.text_input("Login", key="login_username")
+        password = st.text_input("Password", type="password", key="login_password")
+        submitted = st.button("Sign in", type="primary", use_container_width=True, key="login_submit")
+
+    if submitted:
+        if username == expected_username and password == expected_password:
+            st.session_state.auth_ok = True
+            st.rerun()
+        else:
+            st.error("Invalid login or password")
+
+    return False
 
 _REDDIT_FOOTER_RE = re.compile(
     r"\s*submitted by /u/\S+\s+to (?:r|u)/\S+\s*\[link\]\s*\[comments\]\s*$", re.IGNORECASE,
@@ -306,7 +424,8 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         all_categories = sorted(df["primary_category"].dropna().unique().tolist())
 
     # Row 1: niche, app, type, sentiment, search
-    c1, c2, c3, c4, c5 = st.columns([1.8, 2.2, 1, 1, 2])
+    st.markdown('<div class="filter-row-top">', unsafe_allow_html=True)
+    c1, c2, c3, c4, c5 = st.columns([1.35, 1.6, 0.72, 0.72, 1.35])
     with c1:
         sel_niches = st.multiselect("НИША", options=all_niches, default=[], placeholder="Все ниши", key="f_niche")
     with c2:
@@ -318,29 +437,27 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         sent_filter = st.selectbox("ТОНАЛЬНОСТЬ", ["Все", "😊 +", "😞 −", "😐 ~"], key="f_sent")
     with c5:
         search_q = st.text_input("🔍 ПОИСК", value="", key="f_search", placeholder="Ключевое слово…")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Row 2: category + unified date picker
-    r1, r2, _ = st.columns([2, 3, 5])
+    # Row 2: category + single date popover
+    r1, r2, _ = st.columns([1.3, 2.2, 6.5])
     with r1:
         sel_cats = st.multiselect("КАТЕГОРИЯ", options=all_categories, default=[], placeholder="Все", key="f_cat")
 
-    # Unified date block: default 6 months, tap opens calendar + presets
     with r2:
-        # Initialise session defaults (6 months)
         if "f_date_start" not in st.session_state:
             st.session_state.f_date_start = max_date - timedelta(days=180)
             st.session_state.f_date_end = max_date
-            st.session_state.f_date_label = "6 мес"
+            st.session_state.f_date_label = "6 mo"
 
-        # Show current label
-        date_label = st.session_state.get("f_date_label", "6 мес")
+        date_label = st.session_state.get("f_date_label", "6 mo")
         ds = st.session_state.f_date_start
         de = st.session_state.f_date_end
 
-        with st.popover(f"📅 {date_label}  ·  {ds.strftime('%d.%m.%Y')} — {de.strftime('%d.%m.%Y')}"):
-            # Calendar for custom dates
+        st.markdown('<div class="single-date-popover">', unsafe_allow_html=True)
+        with st.popover(f"📅 {date_label} · {ds.strftime('%d.%m.%Y')} — {de.strftime('%d.%m.%Y')}"):
             date_range = st.date_input(
-                "Выберите диапазон",
+                "Select range",
                 value=(st.session_state.f_date_start, st.session_state.f_date_end),
                 min_value=min_date,
                 max_value=max_date,
@@ -350,35 +467,35 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
                 if date_range[0] != st.session_state.f_date_start or date_range[1] != st.session_state.f_date_end:
                     st.session_state.f_date_start = date_range[0]
                     st.session_state.f_date_end = date_range[1]
-                    st.session_state.f_date_label = "Кастом"
+                    st.session_state.f_date_label = "Custom"
 
-            # Preset buttons
-            st.markdown('<div style="font-size:.72rem;color:var(--g-text-secondary);margin:6px 0 2px 0;text-transform:uppercase">Быстрый выбор</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:.72rem;color:var(--g-text-secondary);margin:6px 0 2px 0;text-transform:uppercase">Quick range</div>', unsafe_allow_html=True)
             pb1, pb2, pb3, pb4 = st.columns(4)
             with pb1:
-                if st.button("3 мес", key="dp_3m", use_container_width=True):
+                if st.button("3 mo", key="dp_3m", use_container_width=True):
                     st.session_state.f_date_start = max_date - timedelta(days=90)
                     st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "3 мес"
+                    st.session_state.f_date_label = "3 mo"
                     st.rerun()
             with pb2:
-                if st.button("6 мес", key="dp_6m", use_container_width=True):
+                if st.button("6 mo", key="dp_6m", use_container_width=True):
                     st.session_state.f_date_start = max_date - timedelta(days=180)
                     st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "6 мес"
+                    st.session_state.f_date_label = "6 mo"
                     st.rerun()
             with pb3:
-                if st.button("1 год", key="dp_1y", use_container_width=True):
+                if st.button("1 year", key="dp_1y", use_container_width=True):
                     st.session_state.f_date_start = max_date - timedelta(days=365)
                     st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "1 год"
+                    st.session_state.f_date_label = "1 year"
                     st.rerun()
             with pb4:
-                if st.button("Всё", key="dp_all", use_container_width=True):
+                if st.button("All time", key="dp_all", use_container_width=True):
                     st.session_state.f_date_start = min_date
                     st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "Всё время"
+                    st.session_state.f_date_label = "All time"
                     st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     date_start = st.session_state.f_date_start
     date_end = st.session_state.f_date_end
@@ -799,10 +916,18 @@ def page_analytics(filtered: pd.DataFrame) -> None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def main() -> None:
+    if not _check_auth():
+        return
+
     st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown(
-        '<div style="font-size:.88rem;color:#d8d9da;font-weight:600;margin:0 0 4px 0">'
-        '🤖 Reddit Scraper Dashboard</div>',
+        f'''<div class="appbar">
+            <img class="appbar-logo" src="{LOGO_URL}" alt="Next logo" />
+            <div class="appbar-copy">
+                <div class="appbar-title">Next Reddit Parser</div>
+                <div class="appbar-subtitle">Review intelligence dashboard</div>
+            </div>
+        </div>''',
         unsafe_allow_html=True,
     )
 

@@ -17,16 +17,13 @@ COPY src/ ./src/
 COPY reviews/ ./reviews/
 COPY .streamlit/ ./.streamlit/
 
-# Render sets PORT env var (default 10000)
-ENV PORT=10000
+# Hugging Face Spaces expects the app to listen on port 7860
+ENV PORT=7860
 
-EXPOSE ${PORT}
-
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/_stcore/health || exit 1
+EXPOSE 7860
 
 CMD streamlit run src/dashboard/app.py \
-    --server.port=${PORT} \
+    --server.port=7860 \
     --server.address=0.0.0.0 \
     --server.headless=true \
     --browser.gatherUsageStats=false
