@@ -14,6 +14,7 @@ _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import base64
 import html as html_mod
 import io
 import os
@@ -40,15 +41,26 @@ from src.models import AppConfig, AppNiche  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "reviews"
 CSV_FILE = DATA_DIR / "all_reviews.csv"
-LOGO_URL = "https://i.imgur.com/yv0QF5T.png"
-# GIF for the login screen — circular mask, centered above the form
-# Replace this URL with your own GIF (upload to imgur, giphy, etc.)
-AUTH_GIF_URL = "https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif"
+
+# ── Local assets (base64-encoded so they work in Docker too) ──────────
+_ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+def _load_b64(filename: str) -> str:
+    """Return a data-URI string for an image in the assets folder."""
+    fp = _ASSETS_DIR / filename
+    if not fp.exists():
+        return ""
+    suffix = fp.suffix.lower()
+    mime = {"gif": "image/gif", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(suffix.lstrip("."), "image/png")
+    encoded = base64.b64encode(fp.read_bytes()).decode()
+    return f"data:{mime};base64,{encoded}"
+
+LOGO_URL = _load_b64("photo_2026-03-08 18.03.06.jpeg")
+AUTH_GIF_URL = _load_b64("ScreenRecording_03-08-2026-18-31-16_1.gif")
 
 NICHE_RU: dict[AppNiche, str] = {
-    AppNiche.COUPLE: "💑 Пары и отношения",
+    AppNiche.RELATIONSHIPS: "💑 Отношения и ментал",
     AppNiche.SMOKING: "🚭 Бросить курить",
-    AppNiche.AI_PSYCHOLOGIST: "🧠 AI-психолог",
     AppNiche.PLANT_SCANNER: "🌿 Сканер растений",
     AppNiche.CALORIE_TRACKER: "🍎 Трекер калорий",
 }
@@ -238,44 +250,41 @@ mark { background-color: #3d3a1a; color: #ff9830; padding: 0 2px; border-radius:
     margin-top:2px;
 }
 /* ── Login screen ─────────────────────────────────── */
-.auth-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 99999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--g-bg-base);
-}
 .auth-card {
-    width: min(480px, 90vw);
+    max-width: 360px;
+    margin: 28px auto 0;
     background: var(--g-bg-primary);
     border: 1px solid var(--g-border);
-    border-radius: 18px;
-    padding: 40px 36px 32px;
-    box-shadow: 0 8px 40px rgba(0,0,0,.45);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.4);
+    padding: 28px 28px 22px;
     text-align: center;
 }
-.auth-avatar {
-    width: 96px;
-    height: 96px;
+.auth-avatar-wrap {
+    width: 110px;
+    height: 110px;
     border-radius: 50%;
-    object-fit: cover;
     border: 3px solid var(--g-accent);
-    margin: 0 auto 18px;
-    display: block;
-    box-shadow: 0 0 20px rgba(70,130,255,.35);
+    margin: 0 auto 14px;
+    box-shadow: 0 0 18px rgba(70,130,255,.3);
+    overflow: hidden;
+    position: relative;
+}
+.auth-avatar-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 .auth-title {
-    font-size: 1.35rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--g-text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 .auth-subtitle {
-    font-size: .82rem;
+    font-size: .72rem;
     color: var(--g-text-secondary);
-    margin-bottom: 24px;
+    margin-bottom: 12px;
 }
 </style>
 """
@@ -303,7 +312,7 @@ def _check_auth() -> bool:
     if st.session_state.get("auth_ok") is True:
         return True
 
-    # ── Inject global CSS + hide default Streamlit chrome on login page ──
+    # ── Hide Streamlit chrome on login page ──
     st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown(
         """<style>
@@ -311,47 +320,47 @@ def _check_auth() -> bool:
         [data-testid="stSidebar"],
         [data-testid="stToolbar"],
         footer {display:none !important;}
-        .stApp > div:first-child {padding:0 !important;}
-        /* Style Streamlit inputs inside the card */
-        .auth-form-wrap .stTextInput > div > div > input {
+        section[data-testid="stMain"] > div {padding-top:0 !important;}
+        /* Compact inputs */
+        .auth-inputs .stTextInput > div > div > input {
             background: var(--g-bg-base) !important;
             border: 1px solid var(--g-border) !important;
             color: var(--g-text-primary) !important;
-            border-radius: 10px !important;
-            padding: 10px 14px !important;
-            font-size: .95rem !important;
+            border-radius: 8px !important;
+            padding: 8px 12px !important;
+            font-size: .9rem !important;
         }
-        .auth-form-wrap .stTextInput > label {
+        .auth-inputs .stTextInput > label {
             color: var(--g-text-secondary) !important;
-            font-size: .82rem !important;
+            font-size: .78rem !important;
+            margin-bottom: 2px !important;
         }
-        .auth-form-wrap .stButton > button {
-            border-radius: 10px !important;
-            font-size: 1rem !important;
+        .auth-inputs .stTextInput {margin-bottom: 6px !important;}
+        .auth-inputs .stButton > button {
+            border-radius: 8px !important;
+            font-size: .9rem !important;
             font-weight: 600 !important;
-            padding: 10px 0 !important;
-            margin-top: 8px !important;
+            padding: 8px 0 !important;
+            margin-top: 4px !important;
         }
         </style>""",
         unsafe_allow_html=True,
     )
 
-    # ── Centered card with GIF avatar ──
-    col_l, col_c, col_r = st.columns([1, 2, 1])
+    # ── Single compact card at the top center ──
+    col_l, col_c, col_r = st.columns([1.2, 1, 1.2])
     with col_c:
-        st.markdown("<div style='height:12vh'></div>", unsafe_allow_html=True)
         st.markdown(
             f'''<div class="auth-card">
-                <img class="auth-avatar" src="{AUTH_GIF_URL}" alt="logo" />
-                <div class="auth-title">Next Reddit Parser</div>
-                <div class="auth-subtitle">Sign in to access the dashboard</div>
+                <div class="auth-avatar-wrap"><img src="{AUTH_GIF_URL}" alt="" /></div>
+                <div class="auth-title">Next · Reddit Parser</div>
             </div>''',
             unsafe_allow_html=True,
         )
 
-        st.markdown('<div class="auth-form-wrap">', unsafe_allow_html=True)
-        username = st.text_input("Login", key="login_username", placeholder="Enter your login")
-        password = st.text_input("Password", type="password", key="login_password", placeholder="Enter your password")
+        st.markdown('<div class="auth-inputs">', unsafe_allow_html=True)
+        username = st.text_input("Login", key="login_username", placeholder="login")
+        password = st.text_input("Password", type="password", key="login_password", placeholder="password")
         submitted = st.button("Sign in", type="primary", use_container_width=True, key="login_submit")
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -361,7 +370,7 @@ def _check_auth() -> bool:
             st.rerun()
         else:
             with col_c:
-                st.error("❌ Invalid login or password")
+                st.error("❌ Wrong login or password")
 
     return False
 
@@ -394,27 +403,32 @@ def load_reviews() -> pd.DataFrame:
     return df
 
 def _infer_niche(text: str) -> str:
+    """Infer niche from text content — every post MUST belong to a niche."""
     tl = str(text).lower()
-    if any(w in tl for w in ("smoking", "nicotine", "cigarette", "vape", "quit smoking")):
+    if any(w in tl for w in ("smoking", "nicotine", "cigarette", "vape", "quit smoking", "tobacco")):
         return NICHE_RU[AppNiche.SMOKING]
-    if any(w in tl for w in ("therapy", "therapist", "mental health", "anxiety", "meditation", "psycholog")):
-        return NICHE_RU[AppNiche.AI_PSYCHOLOGIST]
-    if any(w in tl for w in ("plant", "garden", "leaf", "flower", "botanica")):
+    if any(w in tl for w in ("plant", "garden", "leaf", "flower", "botanica", "tree", "mushroom", "succulent")):
         return NICHE_RU[AppNiche.PLANT_SCANNER]
-    if any(w in tl for w in ("calorie", "nutrition", "macro", "diet", "food log", "weight loss")):
+    if any(w in tl for w in ("calorie", "nutrition", "macro", "diet", "food log", "weight loss", "fasting", "keto", "food track")):
         return NICHE_RU[AppNiche.CALORIE_TRACKER]
-    if any(w in tl for w in ("couple", "relationship", "partner", "date night", "long distance")):
-        return NICHE_RU[AppNiche.COUPLE]
-    return "🔍 Общее"
+    # Default: relationships & mental health (largest niche)
+    return NICHE_RU[AppNiche.RELATIONSHIPS]
 
 def _add_niche(df: pd.DataFrame) -> pd.DataFrame:
     niche_map = {a.name: NICHE_RU[a.niche] for a in TRACKED_APPS}
     df = df.copy()
+    # Merge "General / Общее" → "General"
     df["app_name"] = df["app_name"].replace({"General / Общее": "General", "General/ Общее": "General"})
     df["niche_ru"] = df["app_name"].map(niche_map)
     mask = df["niche_ru"].isna()
     if mask.any():
         df.loc[mask, "niche_ru"] = df.loc[mask, "text"].apply(_infer_niche)
+    # Flag multi-app posts (same permalink assigned to multiple apps)
+    if "permalink" in df.columns:
+        apps_per_link = df.groupby("permalink")["app_name"].transform("nunique")
+        df["_is_multi_app"] = apps_per_link > 1
+    else:
+        df["_is_multi_app"] = False
     return df
 
 def _post_base(url: str) -> str:
@@ -430,7 +444,7 @@ def _highlight(text: str, q: str) -> str:
     escaped = _esc(text)
     return re.compile(re.escape(_esc(q)), re.IGNORECASE).sub(lambda m: f"<mark>{m.group()}</mark>", escaped)
 
-_SENT = {"positive": ("😊 позитив", "tag-pos"), "negative": ("😞 негатив", "tag-neg"), "neutral": ("😐 нейтрал", "tag-neu")}
+_SENT = {"positive": ("😊 positive", "tag-pos"), "negative": ("😞 negative", "tag-neg"), "neutral": ("😐 neutral", "tag-neu")}
 def _pill(css: str, txt: str) -> str:
     return f'<span class="tag {css}">{txt}</span>'
 def _pill_sent(label: str) -> str:
@@ -444,7 +458,7 @@ def _pill_cat(cat: str) -> str:
     return _pill("tag-cat", cat)
 def _user_link(author: str) -> str:
     if not author or author == "[deleted]":
-        return '<span style="color:var(--g-text-disabled)">[удалён]</span>'
+        return '<span style="color:var(--g-text-disabled)">[deleted]</span>'
     return f'<a href="https://reddit.com/u/{author}" target="_blank" class="ulink">u/{author}</a>'
 def _stat_val(value: str, label: str, color: str = "#d8d9da") -> str:
     return f'<span class="stat-item"><span class="stat-val" style="color:{color}">{value}</span> {label}</span>'
@@ -456,12 +470,12 @@ def _to_excel(df: pd.DataFrame) -> bytes:
     export = df.copy()
     cols = [c for c in ["niche_ru", "app_name", "source", "author", "title", "text", "subreddit", "permalink", "date", "sentiment_label", "sentiment_score", "categories", "primary_category"] if c in export.columns]
     export = export[cols]
-    rename = {"niche_ru": "Тематика", "app_name": "Приложение", "source": "Тип", "author": "Автор", "title": "Заголовок", "text": "Текст", "subreddit": "Сабреддит", "permalink": "Ссылка", "date": "Дата", "sentiment_label": "Тональность", "sentiment_score": "Балл", "categories": "Категории", "primary_category": "Осн. категория"}
+    rename = {"niche_ru": "Niche", "app_name": "App", "source": "Type", "author": "Author", "title": "Title", "text": "Text", "subreddit": "Subreddit", "permalink": "Link", "date": "Date", "sentiment_label": "Sentiment", "sentiment_score": "Score", "categories": "Categories", "primary_category": "Category"}
     export = export.rename(columns=rename)
-    if "Дата" in export.columns:
-        export["Дата"] = pd.to_datetime(export["Дата"], errors="coerce").dt.tz_localize(None)
+    if "Date" in export.columns:
+        export["Date"] = pd.to_datetime(export["Date"], errors="coerce").dt.tz_localize(None)
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
-        export.to_excel(w, sheet_name="Все", index=False)
+        export.to_excel(w, sheet_name="Reviews", index=False)
     return buf.getvalue()
 
 def _to_csv(df: pd.DataFrame) -> bytes:
@@ -485,22 +499,22 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     st.markdown('<div class="filter-row-top">', unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns([1.35, 1.6, 0.72, 0.72, 1.35])
     with c1:
-        sel_niches = st.multiselect("НИША", options=all_niches, default=[], placeholder="Все ниши", key="f_niche")
+        sel_niches = st.multiselect("NICHE", options=all_niches, default=[], placeholder="All niches", key="f_niche")
     with c2:
         pool = sorted(df.loc[df["niche_ru"].isin(sel_niches), "app_name"].unique().tolist()) if sel_niches else all_apps
-        sel_apps = st.multiselect("ПРИЛОЖЕНИЕ", options=pool, default=[], placeholder="Все", key="f_app")
+        sel_apps = st.multiselect("APP", options=pool, default=[], placeholder="All", key="f_app")
     with c3:
-        src_filter = st.selectbox("ТИП", ["Все", "📄 Посты", "💬 Комменты"], key="f_src")
+        src_filter = st.selectbox("TYPE", ["All", "📄 Posts", "💬 Comments"], key="f_src")
     with c4:
-        sent_filter = st.selectbox("ТОНАЛЬНОСТЬ", ["Все", "😊 +", "😞 −", "😐 ~"], key="f_sent")
+        sent_filter = st.selectbox("SENTIMENT", ["All", "😊 +", "😞 −", "😐 ~"], key="f_sent")
     with c5:
-        search_q = st.text_input("🔍 ПОИСК", value="", key="f_search", placeholder="Ключевое слово…")
+        search_q = st.text_input("🔍 SEARCH", value="", key="f_search", placeholder="Keyword…")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Row 2: category + single date popover
+    # Row 2: category + date popover
     r1, r2, _ = st.columns([1.3, 2.2, 6.5])
     with r1:
-        sel_cats = st.multiselect("КАТЕГОРИЯ", options=all_categories, default=[], placeholder="Все", key="f_cat")
+        sel_cats = st.multiselect("CATEGORY", options=all_categories, default=[], placeholder="All", key="f_cat")
 
     with r2:
         if "f_date_start" not in st.session_state:
@@ -512,14 +526,15 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         ds = st.session_state.f_date_start
         de = st.session_state.f_date_end
 
-        st.markdown('<div class="single-date-popover">', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:.75rem;font-weight:600;color:var(--g-text-secondary);margin:0 0 4px 0;text-transform:uppercase;letter-spacing:.06em">DATE</p>', unsafe_allow_html=True)
         with st.popover(f"📅 {date_label} · {ds.strftime('%d.%m.%Y')} — {de.strftime('%d.%m.%Y')}"):
             date_range = st.date_input(
-                "Select range",
+                "Date range",
                 value=(st.session_state.f_date_start, st.session_state.f_date_end),
                 min_value=min_date,
                 max_value=max_date,
                 key="f_date_picker",
+                label_visibility="collapsed",
             )
             if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
                 if date_range[0] != st.session_state.f_date_start or date_range[1] != st.session_state.f_date_end:
@@ -527,33 +542,26 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
                     st.session_state.f_date_end = date_range[1]
                     st.session_state.f_date_label = "Custom"
 
-            st.markdown('<div style="font-size:.72rem;color:var(--g-text-secondary);margin:6px 0 2px 0;text-transform:uppercase">Quick range</div>', unsafe_allow_html=True)
-            pb1, pb2, pb3, pb4 = st.columns(4)
-            with pb1:
-                if st.button("3 mo", key="dp_3m", use_container_width=True):
-                    st.session_state.f_date_start = max_date - timedelta(days=90)
-                    st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "3 mo"
-                    st.rerun()
-            with pb2:
-                if st.button("6 mo", key="dp_6m", use_container_width=True):
-                    st.session_state.f_date_start = max_date - timedelta(days=180)
-                    st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "6 mo"
-                    st.rerun()
-            with pb3:
-                if st.button("1 year", key="dp_1y", use_container_width=True):
-                    st.session_state.f_date_start = max_date - timedelta(days=365)
-                    st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "1 year"
-                    st.rerun()
-            with pb4:
-                if st.button("All time", key="dp_all", use_container_width=True):
-                    st.session_state.f_date_start = min_date
-                    st.session_state.f_date_end = max_date
-                    st.session_state.f_date_label = "All time"
-                    st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+            if st.button("3 months", key="dp_3m", use_container_width=True):
+                st.session_state.f_date_start = max_date - timedelta(days=90)
+                st.session_state.f_date_end = max_date
+                st.session_state.f_date_label = "3 mo"
+                st.rerun()
+            if st.button("6 months", key="dp_6m", use_container_width=True):
+                st.session_state.f_date_start = max_date - timedelta(days=180)
+                st.session_state.f_date_end = max_date
+                st.session_state.f_date_label = "6 mo"
+                st.rerun()
+            if st.button("1 year", key="dp_1y", use_container_width=True):
+                st.session_state.f_date_start = max_date - timedelta(days=365)
+                st.session_state.f_date_end = max_date
+                st.session_state.f_date_label = "1 year"
+                st.rerun()
+            if st.button("All time", key="dp_all", use_container_width=True):
+                st.session_state.f_date_start = min_date
+                st.session_state.f_date_end = max_date
+                st.session_state.f_date_label = "All time"
+                st.rerun()
 
     date_start = st.session_state.f_date_start
     date_end = st.session_state.f_date_end
@@ -569,9 +577,9 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     sent_map = {"😊 +": "positive", "😞 −": "negative", "😐 ~": "neutral"}
     if sent_filter in sent_map and "sentiment_label" in out.columns:
         out = out[out["sentiment_label"] == sent_map[sent_filter]]
-    if src_filter == "📄 Посты" and "source" in out.columns:
+    if src_filter == "📄 Posts" and "source" in out.columns:
         out = out[out["source"] == "post"]
-    elif src_filter == "💬 Комменты" and "source" in out.columns:
+    elif src_filter == "💬 Comments" and "source" in out.columns:
         out = out[out["source"] == "comment"]
     if "date" in out.columns:
         out = out[out["date"] >= pd.Timestamp(date_start, tz="UTC")]
@@ -631,8 +639,8 @@ def page_reviews(filtered: pd.DataFrame, search_q: str) -> None:
         st.session_state.rv_page = total_pages
     page = st.session_state.rv_page
 
-    sort_opts = ["Новые", "Старые", "Комменты ↓", "Негатив", "Позитив"]
-    sort_map = {"Новые": ("date", False), "Старые": ("date", True), "Комменты ↓": ("_n_comments", False), "Негатив": ("sentiment_score", True), "Позитив": ("sentiment_score", False)}
+    sort_opts = ["Newest", "Oldest", "Comments ↓", "Negative", "Positive"]
+    sort_map = {"Newest": ("date", False), "Oldest": ("date", True), "Comments ↓": ("_n_comments", False), "Negative": ("sentiment_score", True), "Positive": ("sentiment_score", False)}
 
     pc1, pc2, pc3, pc4, pc5 = st.columns([1.5, 0.3, 0.5, 0.3, 7.4])
     with pc1:
@@ -748,37 +756,40 @@ def _render_comment(cr: pd.Series, search_q: str) -> None:
 
 def page_analytics(filtered: pd.DataFrame) -> None:
     if filtered.empty:
-        st.info("Нет данных для аналитики.")
+        st.info("No data for analytics.")
         return
 
-    total = len(filtered)
-    texts = filtered["text"].fillna("").tolist()
-    apps = filtered["app_name"].fillna("").tolist()
+    # Deduplicate for accurate counting: same permalink = same content
+    deduped = filtered.drop_duplicates(subset="permalink") if "permalink" in filtered.columns else filtered
 
-    n_pos = len(filtered[filtered["sentiment_label"] == "positive"]) if "sentiment_label" in filtered.columns else 0
-    n_neg = len(filtered[filtered["sentiment_label"] == "negative"]) if "sentiment_label" in filtered.columns else 0
+    total = len(deduped)
+    texts = deduped["text"].fillna("").tolist()
+    apps = deduped["app_name"].fillna("").tolist()
+
+    n_pos = len(deduped[deduped["sentiment_label"] == "positive"]) if "sentiment_label" in deduped.columns else 0
+    n_neg = len(deduped[deduped["sentiment_label"] == "negative"]) if "sentiment_label" in deduped.columns else 0
     n_neu = total - n_pos - n_neg
-    n_apps = filtered["app_name"].nunique()
-    n_authors = filtered["author"].nunique() if "author" in filtered.columns else 0
-    n_posts = len(filtered[filtered["source"] == "post"]) if "source" in filtered.columns else total
-    n_comments = len(filtered[filtered["source"] == "comment"]) if "source" in filtered.columns else 0
+    n_apps = filtered["app_name"].nunique()  # apps from full set (not deduped)
+    n_authors = deduped["author"].nunique() if "author" in deduped.columns else 0
+    n_posts = len(deduped[deduped["source"] == "post"]) if "source" in deduped.columns else total
+    n_comments = len(deduped[deduped["source"] == "comment"]) if "source" in deduped.columns else 0
 
     k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
-    k1.metric("Всего", total)
-    k2.metric("📄 Посты", n_posts)
-    k3.metric("💬 Комменты", n_comments)
-    k4.metric("😊 Позитив", n_pos)
-    k5.metric("😞 Негатив", n_neg)
-    k6.metric("📱 Прил.", n_apps)
-    k7.metric("👤 Авторы", n_authors)
+    k1.metric("Total", total)
+    k2.metric("📄 Posts", n_posts)
+    k3.metric("💬 Comments", n_comments)
+    k4.metric("😊 Positive", n_pos)
+    k5.metric("😞 Negative", n_neg)
+    k6.metric("📱 Apps", n_apps)
+    k7.metric("👤 Authors", n_authors)
 
     st.markdown("---")
 
-    # Sentiment by app
-    st.markdown("##### Тональность по приложениям")
-    if "sentiment_label" in filtered.columns:
-        app_sent = filtered.groupby("app_name").agg(sent=("sentiment_score", "mean"), cnt=("app_name", "size")).reset_index()
-        app_sent = app_sent[~app_sent["app_name"].isin(["General", "General / Общее"])]
+    # Sentiment by app (deduped, exclude General)
+    st.markdown("##### Sentiment by App")
+    if "sentiment_label" in deduped.columns:
+        _no_gen = deduped[~deduped["app_name"].isin(["General", "General / Общее"])]
+        app_sent = _no_gen.groupby("app_name").agg(sent=("sentiment_score", "mean"), cnt=("app_name", "size")).reset_index()
         app_sent = app_sent[app_sent["cnt"] >= 2].sort_values("sent")
         if len(app_sent) > 15:
             app_sent = pd.concat([app_sent.head(7), app_sent.tail(7)]).drop_duplicates()
@@ -790,20 +801,21 @@ def page_analytics(filtered: pd.DataFrame) -> None:
                 text=[f"{v:+.2f} ({c})" for v, c in zip(app_sent["sent"], app_sent["cnt"])],
                 textposition="outside", textfont=dict(size=11, color="#8b949e"),
             ))
-            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(app_sent) * 28, 200), yaxis=dict(autorange="reversed"), xaxis_title="Средняя тональность")
+            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(app_sent) * 28, 200), yaxis=dict(autorange="reversed"), xaxis_title="Avg sentiment")
             st.plotly_chart(fig, use_container_width=True)
 
-    # Stacked sentiment
-    st.markdown("##### Распределение тональности")
-    if "sentiment_label" in filtered.columns:
-        apps_bar = filtered["app_name"].value_counts()
+    # Stacked sentiment (deduped, exclude General)
+    st.markdown("##### Sentiment Distribution")
+    if "sentiment_label" in deduped.columns:
+        _no_gen2 = deduped[~deduped["app_name"].isin(["General", "General / Общее"])]
+        apps_bar = _no_gen2["app_name"].value_counts()
         apps_bar = apps_bar[apps_bar >= 2].head(15).index.tolist()
         if apps_bar:
-            bar_data = filtered[filtered["app_name"].isin(apps_bar)]
+            bar_data = _no_gen2[_no_gen2["app_name"].isin(apps_bar)]
             sent_counts = bar_data.groupby(["app_name", "sentiment_label"]).size().reset_index(name="count")
             fig = go.Figure()
             cm = {"positive": C_GREEN, "negative": C_RED, "neutral": C_YELLOW}
-            lm = {"positive": "😊 Позитив", "negative": "😞 Негатив", "neutral": "😐 Нейтрал"}
+            lm = {"positive": "😊 Positive", "negative": "😞 Negative", "neutral": "😐 Neutral"}
             for sv in ["positive", "neutral", "negative"]:
                 d = sent_counts[sent_counts["sentiment_label"] == sv]
                 if not d.empty:
@@ -816,50 +828,50 @@ def page_analytics(filtered: pd.DataFrame) -> None:
     # Praise vs Complaints
     c_l, c_r = st.columns(2)
     with c_l:
-        st.markdown("##### 😊 Что хвалят")
+        st.markdown("##### 😊 What People Like")
         highlights = extract_highlights(texts, apps)
         if highlights:
             for h in highlights[:8]:
                 st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_GREEN}">{_esc(h.text)}</b> — {h.count} упом.'
+                    f'<div class="pain-card"><b style="color:{C_GREEN}">{_esc(h.text)}</b> — {h.count} mentions'
                     + "".join(f'<div class="pain-quote">{_esc(e[:200])}</div>' for e in h.examples[:2])
                     + (f'<div class="pain-apps">📱 {", ".join(h.apps[:5])}</div>' if h.apps else "")
                     + '</div>', unsafe_allow_html=True)
         else:
-            st.info("Нет данных")
+            st.info("No data")
     with c_r:
-        st.markdown("##### 😤 На что жалуются")
+        st.markdown("##### 😤 Complaints")
         pains = extract_pains(texts, apps)
         if pains:
             for p in pains[:8]:
                 st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_RED}">{_esc(p.text)}</b> — {p.count} упом.'
+                    f'<div class="pain-card"><b style="color:{C_RED}">{_esc(p.text)}</b> — {p.count} mentions'
                     + "".join(f'<div class="pain-quote">{_esc(e[:200])}</div>' for e in p.examples[:2])
                     + (f'<div class="pain-apps">📱 {", ".join(p.apps[:5])}</div>' if p.apps else "")
                     + '</div>', unsafe_allow_html=True)
         else:
-            st.info("Нет данных")
+            st.info("No data")
 
     st.markdown("---")
 
     # Feature requests
-    st.markdown("##### 💡 Фич-реквесты")
+    st.markdown("##### 💡 Feature Requests")
     freqs = extract_feature_requests(texts, apps)
     if freqs:
         cols_fr = st.columns(2)
         for i, f in enumerate(freqs[:10]):
             with cols_fr[i % 2]:
                 st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_BLUE}">{_esc(f.text)}</b> — {f.count} упом.'
+                    f'<div class="pain-card"><b style="color:{C_BLUE}">{_esc(f.text)}</b> — {f.count} mentions'
                     + "".join(f'<div class="pain-quote">{_esc(e[:150])}</div>' for e in f.examples[:2])
                     + '</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
-    # Categories
-    st.markdown("##### 📂 О чём пишут — категории")
-    if "primary_category" in filtered.columns:
-        cat_counts = filtered["primary_category"].value_counts().head(12)
+    # Categories (deduped)
+    st.markdown("##### 📂 Topics — Categories")
+    if "primary_category" in deduped.columns:
+        cat_counts = deduped["primary_category"].value_counts().head(12)
         if not cat_counts.empty:
             fig = go.Figure(go.Bar(
                 x=cat_counts.values, y=cat_counts.index, orientation="h",
@@ -870,13 +882,13 @@ def page_analytics(filtered: pd.DataFrame) -> None:
 
     st.markdown("---")
 
-    # Demographics
-    st.markdown("##### 🚻 Кто пишет (эвристика)")
+    # Demographics (deduped)
+    st.markdown("##### 🚻 Demographics (heuristic)")
     _male_re = re.compile(r"\b(?:my wife|my girlfriend|as a (?:man|guy|husband|dad|father|boyfriend|bf)|(?:i'm|im) a (?:guy|man|dude))\b", re.I)
     _female_re = re.compile(r"\b(?:my husband|my boyfriend|as a (?:woman|girl|wife|mom|mother|girlfriend|gf)|(?:i'm|im) a (?:girl|woman|lady))\b", re.I)
-    male_n = int(filtered["text"].fillna("").str.contains(_male_re).sum())
-    female_n = int(filtered["text"].fillna("").str.contains(_female_re).sum())
-    unk_n = total - male_n - female_n
+    male_n = int(deduped["text"].fillna("").str.contains(_male_re).sum())
+    female_n = int(deduped["text"].fillna("").str.contains(_female_re).sum())
+    unk_n = max(0, total - male_n - female_n)
 
     gc1, gc2 = st.columns(2)
     with gc1:
@@ -894,19 +906,19 @@ def page_analytics(filtered: pd.DataFrame) -> None:
             "🇦🇺 Australia": re.compile(r"\b(?:australia|australian|sydney|melbourne)\b", re.I),
             "🇮🇳 India": re.compile(r"\b(?:india|indian|mumbai|delhi)\b", re.I),
         }
-        geo_counts = {k: int(filtered["text"].fillna("").str.contains(v).sum()) for k, v in _geo.items()}
+        geo_counts = {k: int(deduped["text"].fillna("").str.contains(v).sum()) for k, v in _geo.items()}
         geo_counts = {k: v for k, v in sorted(geo_counts.items(), key=lambda x: x[1], reverse=True) if v > 0}
         if geo_counts:
             fig = go.Figure(go.Bar(x=list(geo_counts.values()), y=list(geo_counts.keys()), orientation="h", marker_color=C_TEAL))
             fig.update_layout(**PLOTLY_LAYOUT, height=max(len(geo_counts) * 30, 150), yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
-    st.caption("⚠️ Эвристика по тексту.")
+    st.caption("⚠️ Text-based heuristic.")
 
     st.markdown("---")
 
     # Strengths / weaknesses
-    st.markdown("##### ⚔️ Сильные vs Слабые стороны")
-    sw = get_strengths_weaknesses(filtered)
+    st.markdown("##### ⚔️ Strengths vs Weaknesses")
+    sw = get_strengths_weaknesses(deduped)
     if sw:
         for app_name, data in sorted(sw.items()):
             if not data["strengths"] and not data["weaknesses"]:
@@ -914,50 +926,50 @@ def page_analytics(filtered: pd.DataFrame) -> None:
             with st.expander(f"📱 {app_name}"):
                 sc1, sc2 = st.columns(2)
                 with sc1:
-                    st.markdown("**✅ Хвалят:**")
+                    st.markdown("**✅ Pros:**")
                     for s in data["strengths"][:5]:
                         st.markdown(f"• {s}")
                 with sc2:
-                    st.markdown("**❌ Ругают:**")
+                    st.markdown("**❌ Cons:**")
                     for w in data["weaknesses"][:5]:
                         st.markdown(f"• {w}")
 
     st.markdown("---")
 
     # Switches
-    st.markdown("##### 🔄 Переключения")
-    authors_list = filtered["author"].fillna("").tolist() if "author" in filtered.columns else None
+    st.markdown("##### 🔄 App Switches")
+    authors_list = deduped["author"].fillna("").tolist() if "author" in deduped.columns else None
     switches = detect_switches(texts, authors_list)
     if switches:
-        sw_data = [{"Откуда": s.from_app, "Куда": s.to_app, "Причина": s.reason[:100]} for s in switches[:15]]
+        sw_data = [{"From": s.from_app, "To": s.to_app, "Reason": s.reason[:100]} for s in switches[:15]]
         st.dataframe(pd.DataFrame(sw_data), hide_index=True, use_container_width=True)
 
     st.markdown("---")
 
     # Top subreddits
-    st.markdown("##### 🏠 Сабреддиты")
-    if "subreddit" in filtered.columns:
-        top_subs = filtered["subreddit"].value_counts().head(10)
+    st.markdown("##### 🏠 Subreddits")
+    if "subreddit" in deduped.columns:
+        top_subs = deduped["subreddit"].value_counts().head(10)
         if not top_subs.empty:
             fig = go.Figure(go.Bar(x=top_subs.values, y=top_subs.index, orientation="h", marker_color=C_TEAL))
             fig.update_layout(**PLOTLY_LAYOUT, height=max(len(top_subs) * 26, 150), yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig, use_container_width=True)
 
     # N-grams
-    with st.expander("📊 Биграммы & TF-IDF"):
+    with st.expander("📊 Bigrams & TF-IDF"):
         ac1, ac2 = st.columns(2)
         with ac1:
             bigrams = get_ngrams(texts, n=2, top_k=12)
             if bigrams:
-                bg_df = pd.DataFrame(bigrams, columns=["Биграмма", "Частота"])
-                fig = go.Figure(go.Bar(x=bg_df["Частота"], y=bg_df["Биграмма"], orientation="h", marker_color=C_TEAL))
-                fig.update_layout(**PLOTLY_LAYOUT, height=300, yaxis=dict(autorange="reversed"), title="Биграммы")
+                bg_df = pd.DataFrame(bigrams, columns=["Bigram", "Count"])
+                fig = go.Figure(go.Bar(x=bg_df["Count"], y=bg_df["Bigram"], orientation="h", marker_color=C_TEAL))
+                fig.update_layout(**PLOTLY_LAYOUT, height=300, yaxis=dict(autorange="reversed"), title="Bigrams")
                 st.plotly_chart(fig, use_container_width=True)
         with ac2:
             tfidf = get_tfidf_keywords(texts, top_k=12)
             if tfidf:
-                tf_df = pd.DataFrame(tfidf, columns=["Слово", "Вес"])
-                fig = go.Figure(go.Bar(x=tf_df["Вес"], y=tf_df["Слово"], orientation="h", marker_color=C_BLUE))
+                tf_df = pd.DataFrame(tfidf, columns=["Word", "Weight"])
+                fig = go.Figure(go.Bar(x=tf_df["Weight"], y=tf_df["Word"], orientation="h", marker_color=C_BLUE))
                 fig.update_layout(**PLOTLY_LAYOUT, height=300, yaxis=dict(autorange="reversed"), title="TF-IDF")
                 st.plotly_chart(fig, use_container_width=True)
 
@@ -991,7 +1003,7 @@ def main() -> None:
 
     df = load_reviews()
     if df.empty:
-        st.warning("Данных нет. Запустите парсер: `python -m src.cli scrape`")
+        st.warning("No data. Run parser: `python -m src.cli scrape`")
         return
 
     df = _add_niche(df)
@@ -1002,12 +1014,12 @@ def main() -> None:
     n_apps = filtered["app_name"].nunique()
     sent_c = C_GREEN if avg_s > 0.05 else (C_RED if avg_s < -0.05 else C_YELLOW)
     _stat_line([
-        _stat_val(str(total), "отзывов", C_BLUE),
-        _stat_val(f"{avg_s:+.2f}", "тональность", sent_c),
-        _stat_val(str(n_apps), "приложений", C_PURPLE),
+        _stat_val(str(total), "reviews", C_BLUE),
+        _stat_val(f"{avg_s:+.2f}", "sentiment", sent_c),
+        _stat_val(str(n_apps), "apps", C_PURPLE),
     ])
 
-    tab1, tab2 = st.tabs(["📝 Отзывы", "📊 Аналитика"])
+    tab1, tab2 = st.tabs(["📝 Reviews", "📊 Analytics"])
     with tab1:
         page_reviews(filtered, search_q)
     with tab2:

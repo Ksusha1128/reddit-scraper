@@ -22,8 +22,8 @@ class ScraperSettings(BaseSettings):
         "(compatible; research; +https://github.com/ksanjeev284/reddit-universal-scraper)"
     )
     request_timeout: int = Field(default=15, ge=1, le=120)
-    cooldown_min: float = Field(default=2.0, ge=0.5)
-    cooldown_max: float = Field(default=4.0, ge=1.0)
+    cooldown_min: float = Field(default=0.5, ge=0.1)
+    cooldown_max: float = Field(default=1.5, ge=0.3)
     max_retries: int = Field(default=3, ge=1, le=10)
     retry_backoff_factor: float = Field(default=2.0, ge=1.0)
 

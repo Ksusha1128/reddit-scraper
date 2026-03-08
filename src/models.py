@@ -26,11 +26,10 @@ class ReviewSource(str, Enum):
 
 
 class AppNiche(str, Enum):
-    """Market niche / vertical for tracked apps."""
+    """Market niche / vertical for tracked apps — 4 strict niches."""
 
-    COUPLE = "💑 Couple & Relationships"
+    RELATIONSHIPS = "💑 Relationships & Mental Health"
     SMOKING = "🚭 Smoking Cessation"
-    AI_PSYCHOLOGIST = "🧠 AI Psychologist & Mental Health"
     PLANT_SCANNER = "🌿 AI Plant Scanner"
     CALORIE_TRACKER = "🍎 Calorie & Nutrition Tracker"
 
@@ -56,7 +55,7 @@ class AppConfig(BaseModel):
     """Configuration for a single tracked app."""
 
     name: str
-    niche: AppNiche = AppNiche.COUPLE
+    niche: AppNiche = AppNiche.RELATIONSHIPS
     search_queries: list[str] = Field(min_length=1)
     aliases: list[str] = Field(min_length=1)
 

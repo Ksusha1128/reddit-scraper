@@ -42,8 +42,8 @@ class RedditClient:
         # Track mirror health: mirror_url → consecutive_failures
         self._mirror_health: dict[str, int] = {m: 0 for m in self._mirrors}
 
-        # Rate limiting — max 1 concurrent request at a time by default
-        self._semaphore = asyncio.Semaphore(1)
+        # Rate limiting — allow 2 concurrent requests for faster scraping
+        self._semaphore = asyncio.Semaphore(2)
 
         self._client: httpx.AsyncClient | None = None
 
@@ -75,10 +75,10 @@ class RedditClient:
 
     async def get_json(self, path: str, params: dict[str, Any] | None = None) -> dict | None:
         """
-        GET request with mirror rotation and exponential backoff.
+        GET JSON from reddit.com directly (no mirrors — they don't support JSON API).
 
         Args:
-            path: URL path (e.g. "/search.rss" or "/r/relationships/new.json")
+            path: URL path (e.g. "/r/relationships/new.json")
             params: Query parameters
 
         Returns:
@@ -86,51 +86,30 @@ class RedditClient:
         """
         async with self._semaphore:
             client = await self._get_client()
+            url = f"https://www.reddit.com{path}"
 
             for attempt in range(self._max_retries):
-                mirror = self._pick_mirror()
-                url = f"{mirror}{path}"
-
                 try:
                     response = await client.get(url, params=params)
 
                     if response.status_code == 200:
-                        self._mirror_health[mirror] = 0
                         await self._cooldown()
                         return response.json()
 
                     if response.status_code == 429:
                         wait = self._backoff_factor ** (attempt + 1)
-                        logger.warning(
-                            "rate_limited",
-                            mirror=mirror,
-                            retry_in=wait,
-                            attempt=attempt + 1,
-                        )
+                        logger.warning("rate_limited_json", url=url, retry_in=wait, attempt=attempt + 1)
                         await asyncio.sleep(wait)
                         continue
 
-                    logger.warning(
-                        "http_error",
-                        mirror=mirror,
-                        status=response.status_code,
-                        attempt=attempt + 1,
-                    )
-                    self._mirror_health[mirror] = self._mirror_health.get(mirror, 0) + 1
+                    logger.warning("json_http_error", url=url, status=response.status_code, attempt=attempt + 1)
 
                 except (httpx.TimeoutException, httpx.ConnectError) as exc:
-                    self._mirror_health[mirror] = self._mirror_health.get(mirror, 0) + 1
                     wait = self._backoff_factor ** attempt
-                    logger.warning(
-                        "connection_error",
-                        mirror=mirror,
-                        error=str(exc),
-                        retry_in=wait,
-                        attempt=attempt + 1,
-                    )
+                    logger.warning("json_connection_error", url=url, error=str(exc), retry_in=wait, attempt=attempt + 1)
                     await asyncio.sleep(wait)
 
-            logger.error("all_retries_exhausted", path=path)
+            logger.error("json_retries_exhausted", path=path)
             return None
 
     async def get_text(self, path: str, params: dict[str, Any] | None = None) -> str | None:
