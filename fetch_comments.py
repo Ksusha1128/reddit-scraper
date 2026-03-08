@@ -107,6 +107,13 @@ def main():
     posts = df[df["source"] == "post"].copy()
     existing_comments = df[df["source"] == "comment"].copy()
 
+    # Only process posts from last 3 months
+    if "date" in posts.columns:
+        posts["date"] = pd.to_datetime(posts["date"], errors="coerce", utc=True)
+        cutoff = posts["date"].max() - pd.Timedelta(days=30)
+        posts = posts[posts["date"] >= cutoff]
+        print(f"Filtered to last 1 month: {len(posts)} posts")
+
     # Skip posts that already have comments
     already_done: set[str] = set()
     if not existing_comments.empty:
@@ -176,7 +183,7 @@ def main():
             })
 
         processed += 1
-        time.sleep(0.7)  # rate limit
+        time.sleep(0.3)  # rate limit
 
         if processed % 20 == 0:
             elapsed = time.time() - t0

@@ -551,7 +551,7 @@ def _to_csv(df: pd.DataFrame) -> bytes:
 #  GLOBAL FILTERS — compact Grafana-style
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str, str]:
     all_niches = sorted(df["niche_ru"].unique().tolist())
     all_apps = sorted(df["app_name"].unique().tolist())
     min_date = df["date"].min().date() if "date" in df.columns and not df["date"].isna().all() else datetime(2020, 1, 1).date()
@@ -633,10 +633,8 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
     sent_map = {"😊 +": "positive", "😞 −": "negative", "😐 ~": "neutral"}
     if sent_filter in sent_map and "sentiment_label" in out.columns:
         out = out[out["sentiment_label"] == sent_map[sent_filter]]
-    if src_filter == "📄 Posts" and "source" in out.columns:
-        out = out[out["source"] == "post"]
-    elif src_filter == "💬 Comments" and "source" in out.columns:
-        out = out[out["source"] == "comment"]
+    # NOTE: source filter (Posts/Comments) is NOT applied here —
+    # page_reviews handles it so comments always appear with their posts.
     if "date" in out.columns:
         out = out[out["date"] >= pd.Timestamp(date_start, tz="UTC")]
         out = out[out["date"] <= pd.Timestamp(date_end, tz="UTC") + pd.Timedelta(days=1)]
@@ -647,31 +645,37 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         out = out[mask]
     if "date" in out.columns:
         out = out.sort_values("date", ascending=False, na_position="last")
-    return out, search_q
+    return out, search_q, src_filter
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  PAGE 1: REVIEWS FEED
 # ═══════════════════════════════════════════════════════════════════════════
 
-def page_reviews(filtered: pd.DataFrame, search_q: str) -> None:
+def page_reviews(filtered: pd.DataFrame, search_q: str, full_df: pd.DataFrame | None = None, src_filter: str = "All") -> None:
     if filtered.empty:
         st.info("Нет отзывов по выбранным фильтрам.")
         return
 
     has_src = "source" in filtered.columns
-    if has_src:
-        posts = filtered[filtered["source"] == "post"].copy()
-        comments = filtered[filtered["source"] == "comment"].copy()
+
+    # ── Build comment groups from FULL df so comments always appear with posts ──
+    _all = full_df if full_df is not None else filtered
+    if has_src and "source" in _all.columns:
+        all_comments = _all[_all["source"] == "comment"].copy()
     else:
-        posts = filtered.copy()
-        comments = pd.DataFrame()
+        all_comments = pd.DataFrame()
 
     comment_groups: dict[str, pd.DataFrame] = {}
-    if not comments.empty:
-        comments = comments.copy()
-        comments["_base"] = comments["permalink"].fillna("").apply(_post_base)
-        for base, grp in comments.groupby("_base"):
+    if not all_comments.empty:
+        all_comments["_base"] = all_comments["permalink"].fillna("").apply(_post_base)
+        for base, grp in all_comments.groupby("_base"):
             comment_groups[base] = grp
+
+    # ── Posts from filtered data ──
+    if has_src:
+        posts = filtered[filtered["source"] == "post"].copy()
+    else:
+        posts = filtered.copy()
 
     if not posts.empty:
         posts["_base"] = posts["permalink"].fillna("").apply(_post_base)
@@ -680,9 +684,18 @@ def page_reviews(filtered: pd.DataFrame, search_q: str) -> None:
         posts = posts.copy()
         posts["_n_comments"] = 0
 
+    # ── Apply TYPE filter on posts level ──
+    if src_filter == "💬 Comments" and not posts.empty:
+        # Show only posts that HAVE comments
+        posts = posts[posts["_n_comments"] > 0]
+
+    # Count comments that belong to displayed posts
+    post_bases = set(posts["_base"].tolist()) if "_base" in posts.columns and not posts.empty else set()
+    n_comments_shown = sum(len(comment_groups.get(b, [])) for b in post_bases)
+
     st.markdown(
         f'<div style="font-size:.76rem;color:var(--g-text-secondary);margin:2px 0 6px 0">'
-        f'📄 {len(posts)} постов · 💬 {len(comments)} комментариев · {len(filtered)} всего</div>',
+        f'📄 {len(posts)} постов · 💬 {n_comments_shown} комментариев · {len(posts) + n_comments_shown} всего</div>',
         unsafe_allow_html=True,
     )
 
@@ -735,9 +748,8 @@ def page_reviews(filtered: pd.DataFrame, search_q: str) -> None:
                 st.session_state.rv_page = page + 1
                 st.rerun()
 
-    if not comments.empty and not posts.empty:
-        post_bases = set(posts["_base"].tolist())
-        orph = comments[~comments["_base"].isin(post_bases)]
+    if not all_comments.empty and not posts.empty:
+        orph = all_comments[~all_comments["_base"].isin(post_bases)]
         if len(orph) > 0:
             with st.expander(f"💬 {len(orph)} комментариев без привязки к посту"):
                 for _, row in orph.head(20).iterrows():
@@ -770,6 +782,8 @@ def _render_card(pr: pd.Series, comment_groups: dict, search_q: str) -> None:
             pills += " " + _pill_niche(niche)
         if primary_cat and primary_cat != "nan":
             pills += " " + _pill_cat(primary_cat.strip())
+        if n_comm > 0:
+            pills += " " + _pill("tag-comm", f"💬 {n_comm}")
 
         st.markdown(f'<div class="rv-meta">{_user_link(author)} · {date_s} · {pills}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="rv-text">{_highlight(text[:1500], search_q)}</div>', unsafe_allow_html=True)
@@ -1067,7 +1081,7 @@ def main() -> None:
         return
 
     df = _add_niche(df)
-    filtered, search_q = _global_filters(df)
+    filtered, search_q, src_filter = _global_filters(df)
 
     total = len(filtered)
     avg_s = filtered["sentiment_score"].mean() if "sentiment_score" in filtered.columns and total > 0 else 0
@@ -1081,7 +1095,7 @@ def main() -> None:
 
     tab1, tab2 = st.tabs(["📝 Reviews", "📊 Analytics"])
     with tab1:
-        page_reviews(filtered, search_q)
+        page_reviews(filtered, search_q, df, src_filter)
     with tab2:
         page_analytics(filtered)
 
