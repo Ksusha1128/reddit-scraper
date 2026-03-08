@@ -41,6 +41,9 @@ from src.models import AppConfig, AppNiche  # noqa: E402
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "reviews"
 CSV_FILE = DATA_DIR / "all_reviews.csv"
 LOGO_URL = "https://i.imgur.com/yv0QF5T.png"
+# GIF for the login screen — circular mask, centered above the form
+# Replace this URL with your own GIF (upload to imgur, giphy, etc.)
+AUTH_GIF_URL = "https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif"
 
 NICHE_RU: dict[AppNiche, str] = {
     AppNiche.COUPLE: "💑 Пары и отношения",
@@ -234,24 +237,45 @@ mark { background-color: #3d3a1a; color: #ff9830; padding: 0 2px; border-radius:
     color:var(--g-text-secondary);
     margin-top:2px;
 }
-.auth-wrap {
-    max-width: 440px;
-    margin: 7vh auto 0 auto;
-    padding: 22px;
+/* ── Login screen ─────────────────────────────────── */
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--g-bg-base);
+}
+.auth-card {
+    width: min(480px, 90vw);
     background: var(--g-bg-primary);
     border: 1px solid var(--g-border);
-    border-radius: 12px;
+    border-radius: 18px;
+    padding: 40px 36px 32px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.45);
+    text-align: center;
+}
+.auth-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--g-accent);
+    margin: 0 auto 18px;
+    display: block;
+    box-shadow: 0 0 20px rgba(70,130,255,.35);
 }
 .auth-title {
-    font-size: 1.15rem;
+    font-size: 1.35rem;
     font-weight: 700;
     color: var(--g-text-primary);
     margin-bottom: 4px;
 }
 .auth-subtitle {
-    font-size: .8rem;
+    font-size: .82rem;
     color: var(--g-text-secondary);
-    margin-bottom: 16px;
+    margin-bottom: 24px;
 }
 </style>
 """
@@ -279,31 +303,65 @@ def _check_auth() -> bool:
     if st.session_state.get("auth_ok") is True:
         return True
 
+    # ── Inject global CSS + hide default Streamlit chrome on login page ──
     st.markdown(_CSS, unsafe_allow_html=True)
     st.markdown(
-        f'''<div class="auth-wrap">
-            <div class="appbar" style="border-bottom:none;margin-bottom:14px;padding-bottom:0;">
-                <img class="appbar-logo" src="{LOGO_URL}" alt="Next logo" />
-                <div class="appbar-copy">
-                    <div class="auth-title">Next Reddit Parser</div>
-                    <div class="auth-subtitle">Sign in to access the dashboard</div>
-                </div>
-            </div>
-        </div>''',
+        """<style>
+        header[data-testid="stHeader"],
+        [data-testid="stSidebar"],
+        [data-testid="stToolbar"],
+        footer {display:none !important;}
+        .stApp > div:first-child {padding:0 !important;}
+        /* Style Streamlit inputs inside the card */
+        .auth-form-wrap .stTextInput > div > div > input {
+            background: var(--g-bg-base) !important;
+            border: 1px solid var(--g-border) !important;
+            color: var(--g-text-primary) !important;
+            border-radius: 10px !important;
+            padding: 10px 14px !important;
+            font-size: .95rem !important;
+        }
+        .auth-form-wrap .stTextInput > label {
+            color: var(--g-text-secondary) !important;
+            font-size: .82rem !important;
+        }
+        .auth-form-wrap .stButton > button {
+            border-radius: 10px !important;
+            font-size: 1rem !important;
+            font-weight: 600 !important;
+            padding: 10px 0 !important;
+            margin-top: 8px !important;
+        }
+        </style>""",
         unsafe_allow_html=True,
     )
 
-    with st.container():
-        username = st.text_input("Login", key="login_username")
-        password = st.text_input("Password", type="password", key="login_password")
+    # ── Centered card with GIF avatar ──
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        st.markdown("<div style='height:12vh'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f'''<div class="auth-card">
+                <img class="auth-avatar" src="{AUTH_GIF_URL}" alt="logo" />
+                <div class="auth-title">Next Reddit Parser</div>
+                <div class="auth-subtitle">Sign in to access the dashboard</div>
+            </div>''',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div class="auth-form-wrap">', unsafe_allow_html=True)
+        username = st.text_input("Login", key="login_username", placeholder="Enter your login")
+        password = st.text_input("Password", type="password", key="login_password", placeholder="Enter your password")
         submitted = st.button("Sign in", type="primary", use_container_width=True, key="login_submit")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if submitted:
         if username == expected_username and password == expected_password:
             st.session_state.auth_ok = True
             st.rerun()
         else:
-            st.error("Invalid login or password")
+            with col_c:
+                st.error("❌ Invalid login or password")
 
     return False
 
