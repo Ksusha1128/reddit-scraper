@@ -56,7 +56,7 @@ def _load_b64(filename: str) -> str:
     return f"data:{mime};base64,{encoded}"
 
 LOGO_URL = _load_b64("photo_2026-03-08 18.03.06.jpeg")
-AUTH_GIF_URL = _load_b64("ScreenRecording_03-08-2026-18-31-16_1.gif")
+AUTH_GIF_URL = _load_b64("login_avatar.gif")
 
 NICHE_RU: dict[AppNiche, str] = {
     AppNiche.RELATIONSHIPS: "💑 Отношения и ментал",
