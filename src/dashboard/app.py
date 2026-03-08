@@ -42,8 +42,9 @@ from src.models import AppConfig, AppNiche  # noqa: E402
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "reviews"
 CSV_FILE = DATA_DIR / "all_reviews.csv"
 
-# ── Local assets (base64-encoded so they work in Docker too) ──────────
+# ── Assets: load from local file (dev) or fall back to GitHub raw URL ─
 _ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+_GH_RAW = "https://raw.githubusercontent.com/Ksusha1128/reddit-scraper/main/src/dashboard/assets"
 
 def _load_b64(filename: str) -> str:
     """Return a data-URI string for an image in the assets folder."""
@@ -55,8 +56,15 @@ def _load_b64(filename: str) -> str:
     encoded = base64.b64encode(fp.read_bytes()).decode()
     return f"data:{mime};base64,{encoded}"
 
-LOGO_URL = _load_b64("photo_2026-03-08 18.03.06.jpeg")
-AUTH_GIF_URL = _load_b64("login_avatar.gif")
+def _asset_url(filename: str) -> str:
+    """Return local base64 data-URI if the file exists, otherwise GitHub raw URL."""
+    local = _load_b64(filename)
+    if local:
+        return local
+    return f"{_GH_RAW}/{filename.replace(' ', '%20')}"
+
+LOGO_URL = _asset_url("photo_2026-03-08 18.03.06.jpeg")
+AUTH_GIF_URL = _asset_url("login_avatar.gif")
 
 NICHE_RU: dict[AppNiche, str] = {
     AppNiche.RELATIONSHIPS: "💑 Отношения и ментал",
