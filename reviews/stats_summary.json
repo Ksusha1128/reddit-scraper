@@ -1,0 +1,105 @@
+{
+  "total_reviews": 211,
+  "posts_count": 28,
+  "comments_count": 183,
+  "apps": {
+    "Couple Joy": {
+      "total": 31,
+      "avg_sentiment": 0.615,
+      "positive": 27,
+      "negative": 2,
+      "neutral": 2,
+      "top_categories": {
+        "👫 Влияние на отношения": 10,
+        "💰 Цена / Подписка": 8,
+        "💬 Общение / Коммуникация": 6,
+        "📝 Без категории": 4,
+        "🎯 Активности / Игры / Квизы": 2
+      }
+    },
+    "General / Общее": {
+      "total": 93,
+      "avg_sentiment": 0.513,
+      "positive": 72,
+      "negative": 13,
+      "neutral": 8,
+      "top_categories": {
+        "👫 Влияние на отношения": 27,
+        "💬 Общение / Коммуникация": 18,
+        "🎯 Активности / Игры / Квизы": 15,
+        "📝 Без категории": 10,
+        "💰 Цена / Подписка": 9
+      }
+    },
+    "Lovewick": {
+      "total": 57,
+      "avg_sentiment": 0.547,
+      "positive": 45,
+      "negative": 5,
+      "neutral": 7,
+      "top_categories": {
+        "🎯 Активности / Игры / Квизы": 18,
+        "👫 Влияние на отношения": 15,
+        "📝 Без категории": 7,
+        "💬 Общение / Коммуникация": 6,
+        "❤️ Близость / Интимность": 4
+      }
+    },
+    "Paired": {
+      "total": 30,
+      "avg_sentiment": 0.462,
+      "positive": 21,
+      "negative": 5,
+      "neutral": 4,
+      "top_categories": {
+        "👫 Влияние на отношения": 12,
+        "❤️ Близость / Интимность": 5,
+        "💰 Цена / Подписка": 4,
+        "💬 Общение / Коммуникация": 3,
+        "📝 Без категории": 2
+      }
+    }
+  },
+  "categories": {
+    "👫 Влияние на отношения": 64,
+    "🎯 Активности / Игры / Квизы": 37,
+    "💬 Общение / Коммуникация": 33,
+    "💰 Цена / Подписка": 24,
+    "📝 Без категории": 23,
+    "❤️ Близость / Интимность": 11,
+    "⭐ Общее впечатление": 11,
+    "🐛 Баги / Технические проблемы": 4,
+    "📱 UI/UX / Дизайн": 3,
+    "📅 Планирование / Календарь": 1
+  },
+  "sentiment": {
+    "positive": 165,
+    "negative": 25,
+    "neutral": 21
+  },
+  "subreddits": {
+    "apps": 76,
+    "LongDistance": 38,
+    "DeadBedrooms": 18,
+    "BestofRedditorUpdates": 16,
+    "CharlotteDobreYouTube": 10,
+    "Investors": 10,
+    "LDR": 9,
+    "dating": 6,
+    "AsOneAfterInfidelity": 5,
+    "chinatravel": 4,
+    "UGCForBrands": 3,
+    "iosapps": 3,
+    "UConnBasketball": 2,
+    "iOSAppsMarketing": 2,
+    "ProductHunters": 2,
+    "FOXauto": 1,
+    "u/celebnationofficial": 1,
+    "moddedandroidapps": 1,
+    "CoupleMemes": 1,
+    "csgo": 1,
+    "indiehackers": 1,
+    "ShareMobileApps": 1
+  },
+  "generated_at": "2026-02-18 08:44:05"
+}

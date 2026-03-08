@@ -1,3 +1,52 @@
-data/
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment & secrets
 .env
+*.pem
+*.key
+
+# Data (scraped data should not be in git)
+data/
+# reviews/ — INCLUDED for Render deploy (contains all_reviews.csv)
+surveys/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Backups
+*.bak
+*.bak2
+*.old
+Dockerfile.old

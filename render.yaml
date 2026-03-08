@@ -1,0 +1,12 @@
+# Render.com Blueprint — one-click deploy
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: reddit-review-dashboard
+    runtime: docker
+    plan: free               # free tier: 750 hrs/mo, spins down after 15 min idle
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: "10000"
