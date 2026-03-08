@@ -195,7 +195,13 @@ a.ulink:hover { text-decoration:underline; }
 .rv-meta { font-size:.72rem; color:var(--g-text-secondary); margin:2px 0 4px 0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .rv-text { font-size:.84rem; color:var(--g-text-primary); line-height:1.55; margin:4px 0; }
 .rv-link { font-size:.72rem; margin-top:4px; }
-.cm-block { border-left:3px solid var(--g-border); padding-left:10px; margin:3px 0; }
+.cm-block { border-left:3px solid #4a4a5a; padding:8px 0 8px 14px; margin:4px 0 4px 8px; position:relative; }
+.cm-block::before { content:''; position:absolute; left:-3px; top:0; bottom:0; width:3px; border-radius:2px; background:linear-gradient(180deg, #4a9eff22, #4a9eff08); }
+.cm-author { font-weight:600; color:#58a6ff; font-size:.78rem; }
+.cm-meta { font-size:.7rem; color:var(--g-text-secondary); margin-bottom:3px; display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.cm-text { font-size:.82rem; color:var(--g-text-primary); line-height:1.5; margin:2px 0; }
+.cm-divider { border:none; border-top:1px solid var(--g-border); margin:8px 0 6px 0; }
+.cm-header { color:var(--g-text-secondary); font-size:.76rem; font-weight:600; margin:6px 0 4px 0; padding-top:6px; border-top:1px solid var(--g-border); }
 .stat-bar { display:flex; gap:0; margin:2px 0 6px 0; flex-wrap:wrap; align-items:center; padding:4px 0; border-bottom:1px solid var(--g-border); }
 .stat-item { font-size:.76rem; color:var(--g-text-secondary); }
 .stat-val { font-weight:600; margin-right:2px; font-family:monospace; }
@@ -422,6 +428,55 @@ def _infer_niche(text: str) -> str:
     # Default: relationships & mental health (largest niche)
     return NICHE_RU[AppNiche.RELATIONSHIPS]
 
+# ── Normalize categories: all → Russian, no emoji ─────────────────────
+_CAT_MAP: dict[str, str] = {
+    # Old English categories
+    "⭐ General Impression": "Пользовательский опыт",
+    "📱 UI/UX & Design": "Интерфейс и дизайн",
+    "🎯 Activities & Games": "Активность и вовлечённость",
+    "🐛 Bugs & Technical Issues": "Баги и техпроблемы",
+    "👫 Relationship Impact": "Пользовательский опыт",
+    "💬 Communication": "Общение и коммуникация",
+    "💰 Pricing & Subscription": "Цена и подписка",
+    "📅 Planning & Calendar": "Намерение юзеров",
+    "🔒 Privacy & Security": "Приватность и безопасность",
+    "❤️ Intimacy": "Пользовательский опыт",
+    "📝 Uncategorized": "Посты на тему",
+    # Old Russian categories
+    "⭐ Общее впечатление": "Пользовательский опыт",
+    "⭐ UX / Интерфейс": "Интерфейс и дизайн",
+    "❤️ Общее мнение": "Пользовательский опыт",
+    "❤️ Близость / Интимность": "Пользовательский опыт",
+    "🎯 Активности / Игры / Квизы": "Активность и вовлечённость",
+    "🐛 Баги / Проблемы": "Баги и техпроблемы",
+    "🐛 Баги / Технические проблемы": "Баги и техпроблемы",
+    "👫 Влияние на отношения": "Пользовательский опыт",
+    "� Общение / Коммуникация": "Общение и коммуникация",
+    "💰 Цена / Подписка": "Цена и подписка",
+    "📊 Функции": "Функции",
+    "📋 Без категории": "Посты на тему",
+    "� Без категории": "Посты на тему",
+    # New enum values (direct pass-through)
+    "Баги и техпроблемы": "Баги и техпроблемы",
+    "Активность и вовлечённость": "Активность и вовлечённость",
+    "Интерфейс и дизайн": "Интерфейс и дизайн",
+    "Общение и коммуникация": "Общение и коммуникация",
+    "Функции": "Функции",
+    "Цена и подписка": "Цена и подписка",
+    "Разработчики": "Разработчики",
+    "Пользовательский опыт": "Пользовательский опыт",
+    "Потребности": "Потребности",
+    "Приватность и безопасность": "Приватность и безопасность",
+    "Посты на тему": "Посты на тему",
+    "Намерение юзеров": "Намерение юзеров",
+    "Без категории": "Посты на тему",
+}
+
+def _normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
+    if "primary_category" in df.columns:
+        df["primary_category"] = df["primary_category"].map(_CAT_MAP).fillna("Посты на тему")
+    return df
+
 def _add_niche(df: pd.DataFrame) -> pd.DataFrame:
     niche_map = {a.name: NICHE_RU[a.niche] for a in TRACKED_APPS}
     df = df.copy()
@@ -437,6 +492,8 @@ def _add_niche(df: pd.DataFrame) -> pd.DataFrame:
         df["_is_multi_app"] = apps_per_link > 1
     else:
         df["_is_multi_app"] = False
+    # Normalize categories
+    df = _normalize_categories(df)
     return df
 
 def _post_base(url: str) -> str:
@@ -519,56 +576,47 @@ def _global_filters(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
         search_q = st.text_input("🔍 SEARCH", value="", key="f_search", placeholder="Keyword…")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Row 2: category + date popover
-    r1, r2, _ = st.columns([1.3, 2.2, 6.5])
+    # Row 2: category + date
+    r1, r2, _ = st.columns([2.5, 2.2, 5.3])
     with r1:
-        sel_cats = st.multiselect("CATEGORY", options=all_categories, default=[], placeholder="All", key="f_cat")
+        sel_cats = st.multiselect("CATEGORY", options=all_categories, default=[], placeholder="Все категории", key="f_cat")
 
     with r2:
         if "f_date_start" not in st.session_state:
-            st.session_state.f_date_start = max_date - timedelta(days=180)
+            st.session_state.f_date_start = min_date
             st.session_state.f_date_end = max_date
-            st.session_state.f_date_label = "6 mo"
 
-        date_label = st.session_state.get("f_date_label", "6 mo")
         ds = st.session_state.f_date_start
         de = st.session_state.f_date_end
 
         st.markdown('<p style="font-size:.75rem;font-weight:600;color:var(--g-text-secondary);margin:0 0 4px 0;text-transform:uppercase;letter-spacing:.06em">DATE</p>', unsafe_allow_html=True)
-        with st.popover(f"📅 {date_label} · {ds.strftime('%d.%m.%Y')} — {de.strftime('%d.%m.%Y')}"):
-            date_range = st.date_input(
-                "Date range",
-                value=(st.session_state.f_date_start, st.session_state.f_date_end),
-                min_value=min_date,
-                max_value=max_date,
-                key="f_date_picker",
-                label_visibility="collapsed",
-            )
-            if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-                if date_range[0] != st.session_state.f_date_start or date_range[1] != st.session_state.f_date_end:
-                    st.session_state.f_date_start = date_range[0]
-                    st.session_state.f_date_end = date_range[1]
-                    st.session_state.f_date_label = "Custom"
-
+        with st.popover(f"{ds.strftime('%d.%m.%Y')} — {de.strftime('%d.%m.%Y')}"):
+            st.markdown("**From — To**")
+            dc1, dc2 = st.columns(2)
+            with dc1:
+                d_start = st.date_input("from", value=ds, min_value=min_date, max_value=max_date, key="f_ds", label_visibility="collapsed")
+            with dc2:
+                d_end = st.date_input("to", value=de, min_value=min_date, max_value=max_date, key="f_de", label_visibility="collapsed")
+            if d_start != ds or d_end != de:
+                st.session_state.f_date_start = d_start
+                st.session_state.f_date_end = d_end
+                st.rerun()
+            st.markdown("---")
             if st.button("3 months", key="dp_3m", use_container_width=True):
                 st.session_state.f_date_start = max_date - timedelta(days=90)
                 st.session_state.f_date_end = max_date
-                st.session_state.f_date_label = "3 mo"
                 st.rerun()
             if st.button("6 months", key="dp_6m", use_container_width=True):
                 st.session_state.f_date_start = max_date - timedelta(days=180)
                 st.session_state.f_date_end = max_date
-                st.session_state.f_date_label = "6 mo"
                 st.rerun()
             if st.button("1 year", key="dp_1y", use_container_width=True):
                 st.session_state.f_date_start = max_date - timedelta(days=365)
                 st.session_state.f_date_end = max_date
-                st.session_state.f_date_label = "1 year"
                 st.rerun()
             if st.button("All time", key="dp_all", use_container_width=True):
                 st.session_state.f_date_start = min_date
                 st.session_state.f_date_end = max_date
-                st.session_state.f_date_label = "All time"
                 st.rerun()
 
     date_start = st.session_state.f_date_start
@@ -711,7 +759,8 @@ def _render_card(pr: pd.Series, comment_groups: dict, search_q: str) -> None:
     post_comments = comment_groups.get(base, pd.DataFrame())
     n_comm = len(post_comments)
 
-    label = f"📄 {title[:90]}  ·  {app}  ·  {date_s}  ·  💬 {n_comm}"
+    comm_part = f"  ·  💬 {n_comm}" if n_comm > 0 else ""
+    label = f"📄 {title[:90]}  ·  {app}  ·  {date_s}{comm_part}"
     with st.expander(label, expanded=True):
         pills = _pill("tag-post", "📄 пост")
         if app:
@@ -727,17 +776,16 @@ def _render_card(pr: pd.Series, comment_groups: dict, search_q: str) -> None:
         if link:
             st.markdown(f'<div class="rv-link"><a href="{link}" target="_blank" class="ulink">🔗 Reddit</a></div>', unsafe_allow_html=True)
 
+        # ── Comments inside card ──
         if n_comm > 0:
-            st.markdown(
-                f'<div style="margin-top:6px;padding-top:5px;border-top:1px solid var(--g-border)">'
-                f'<b style="color:var(--g-text-secondary);font-size:.76rem">💬 {n_comm} комментариев</b></div>',
-                unsafe_allow_html=True,
-            )
+            parts = [f'<div class="cm-header">💬 {n_comm} комментариев</div>']
             for _, cr in post_comments.iterrows():
-                _render_comment(cr, search_q)
+                parts.append(_render_comment_html(cr, search_q))
+            st.markdown("\n".join(parts), unsafe_allow_html=True)
 
 
-def _render_comment(cr: pd.Series, search_q: str) -> None:
+def _render_comment_html(cr: pd.Series, search_q: str) -> str:
+    """Return one comment as HTML string (no st.markdown call)."""
     c_author = cr.get("author", "?")
     c_text = str(cr.get("text", ""))[:600]
     c_sent = cr.get("sentiment_label", "")
@@ -746,17 +794,21 @@ def _render_comment(cr: pd.Series, search_q: str) -> None:
     c_app = cr.get("app_name", "")
     c_cat = str(cr.get("primary_category", ""))
     link_html = f' · <a href="{c_link}" target="_blank" class="ulink">🔗</a>' if c_link else ""
-    cat_html = f' {_pill_cat(c_cat.strip())}' if c_cat and c_cat != "nan" else ""
-    st.markdown(
+    cat_html = f" {_pill_cat(c_cat.strip())}" if c_cat and c_cat != "nan" else ""
+    return (
         f'<div class="cm-block">'
-        f'{_pill("tag-comm", "💬")} '
-        f'{_user_link(c_author)} · '
-        f'<span style="color:var(--g-text-secondary);font-size:.72rem">{c_date}</span> '
-        f'{_pill_sent(c_sent)} {_pill_app(c_app)}{cat_html}{link_html}<br>'
-        f'<span style="font-size:.82rem">{_highlight(c_text, search_q)}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
+        f'<div class="cm-meta">'
+        f'<span class="cm-author">u/{_esc(str(c_author))}</span> '
+        f'{c_date} {_pill_sent(c_sent)} {_pill_app(c_app)}{cat_html}{link_html}'
+        f'</div>'
+        f'<div class="cm-text">{_highlight(c_text, search_q)}</div>'
+        f'</div>'
     )
+
+
+def _render_comment(cr: pd.Series, search_q: str) -> None:
+    """Render a single comment via st.markdown (for orphan comments)."""
+    st.markdown(_render_comment_html(cr, search_q), unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  PAGE 2: ANALYTICS

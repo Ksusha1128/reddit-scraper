@@ -35,17 +35,19 @@ class AppNiche(str, Enum):
 
 
 class ReviewCategory(str, Enum):
-    COMMUNICATION = "💬 Communication"
-    INTIMACY = "❤️ Intimacy"
-    ACTIVITIES = "🎯 Activities & Games"
-    PLANNING = "📅 Planning & Calendar"
-    PRICING = "💰 Pricing & Subscription"
-    BUGS = "🐛 Bugs & Technical Issues"
-    GENERAL = "⭐ General Impression"
-    RELATIONSHIP = "👫 Relationship Impact"
-    PRIVACY = "🔒 Privacy & Security"
-    UI_UX = "📱 UI/UX & Design"
-    UNCATEGORIZED = "📝 Uncategorized"
+    BUGS = "Баги и техпроблемы"
+    ENGAGEMENT = "Активность и вовлечённость"
+    UI_UX = "Интерфейс и дизайн"
+    COMMUNICATION = "Общение и коммуникация"
+    FEATURES = "Функции"
+    PRICING = "Цена и подписка"
+    DEVELOPERS = "Разработчики"
+    USER_EXPERIENCE = "Пользовательский опыт"
+    NEEDS = "Потребности"
+    PRIVACY = "Приватность и безопасность"
+    TOPIC_POST = "Посты на тему"
+    USER_INTENT = "Намерение юзеров"
+    UNCATEGORIZED = "Без категории"
 
 
 # ── Domain Models ────────────────────────────────────────────────────────────

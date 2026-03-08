@@ -286,52 +286,47 @@ class ReviewScraper:
     # -- Comment collection --
 
     async def _collect_comments(self, post_url: str, app: AppConfig) -> None:
+        """Collect ALL comments from a post RSS feed (no relevance filter)."""
         rss_url = post_url.rstrip("/").split("?")[0] + ".rss"
         rss_content = await self._client.get_rss(rss_url, params={"limit": 100})
         if not rss_content:
             return
         entries = parse_rss_feed(rss_content)
-        relevance_keywords = {"app", "recommend", "download", "tried", "using", "used", "subscription", "free", "paid", "features", "questions", "daily"}
         for i, comment in enumerate(entries):
-            if i == 0:
+            if i == 0:  # first entry is the post itself
                 continue
-            if len(comment.body) < 15:
+            if len(comment.body) < 10:
                 continue
             content_hash = RedditClient.content_hash(comment.body)
             if content_hash in self._seen:
                 continue
-            text_lower = comment.body.lower()
-            is_relevant = _text_mentions_app(comment.body, app) or any(kw in text_lower for kw in relevance_keywords)
-            if not is_relevant:
-                continue
             self._seen.add(content_hash)
             comment_with_link = RSSEntry(**{**comment.model_dump(), "link": post_url})
-            self._add_review(app.name, ReviewSource.COMMENT, comment_with_link, comment.body)
+            # Detect app from comment text; fallback to parent post's app
+            detected_app = app.name if _text_mentions_app(comment.body, app) else app.name
+            self._add_review(detected_app, ReviewSource.COMMENT, comment_with_link, comment.body)
 
     async def _collect_comments_generic(self, post_url: str, apps: list[AppConfig], niche: AppNiche) -> None:
+        """Collect ALL comments from a post RSS feed (generic / niche context)."""
         rss_url = post_url.rstrip("/").split("?")[0] + ".rss"
         rss_content = await self._client.get_rss(rss_url, params={"limit": 100})
         if not rss_content:
             return
         entries = parse_rss_feed(rss_content)
         for i, comment in enumerate(entries):
-            if i == 0:
+            if i == 0:  # first entry is the post itself
                 continue
-            if len(comment.body) < 15:
+            if len(comment.body) < 10:
                 continue
             content_hash = RedditClient.content_hash(comment.body)
             if content_hash in self._seen:
                 continue
-            detected = _detect_apps_in_text(comment.body, apps)
-            if not detected:
-                text_lower = comment.body.lower()
-                relevance = ("app", "recommend", "download", "tried", "using")
-                if any(kw in text_lower for kw in relevance):
-                    detected = [f"[{niche.value}]"]
-                else:
-                    continue
             self._seen.add(content_hash)
             comment_with_link = RSSEntry(**{**comment.model_dump(), "link": post_url})
+            # Detect specific app or assign to niche
+            detected = _detect_apps_in_text(comment.body, apps)
+            if not detected:
+                detected = [f"[{niche.value}]"]
             for app_name in detected:
                 self._add_review(app_name, ReviewSource.COMMENT, comment_with_link, comment.body)
 
