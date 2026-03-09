@@ -714,16 +714,34 @@ def page_reviews(filtered: pd.DataFrame, search_q: str, full_df: pd.DataFrame | 
 
     has_src = "source" in filtered.columns
 
-    # ── Build comment groups from FULL df so comments always appear with posts ──
+    # ── Build comment groups from FILTERED data only ──
+    # Use filtered comments so niche/app filters apply to comments too
+    if has_src and "source" in filtered.columns:
+        filt_comments = filtered[filtered["source"] == "comment"].copy()
+    else:
+        filt_comments = pd.DataFrame()
+
+    # If full_df provided, get comments that belong to filtered posts
+    # This ensures we show comments of displayed posts even if they weren't
+    # separately matched by filters (e.g. comment has different app_name)
+    filt_posts = filtered[filtered["source"] == "post"] if has_src else filtered
+    post_bases_all = set(filt_posts["permalink"].fillna("").apply(_post_base).dropna().unique())
+
     _all = full_df if full_df is not None else filtered
     if has_src and "source" in _all.columns:
-        all_comments = _all[_all["source"] == "comment"].copy()
+        all_comments_full = _all[_all["source"] == "comment"].copy()
+        all_comments_full["_base"] = all_comments_full["permalink"].fillna("").apply(_post_base)
+        # Only keep comments whose parent post is in filtered set
+        all_comments = all_comments_full[all_comments_full["_base"].isin(post_bases_all)].copy()
     else:
-        all_comments = pd.DataFrame()
+        all_comments = filt_comments.copy()
+        if not all_comments.empty:
+            all_comments["_base"] = all_comments["permalink"].fillna("").apply(_post_base)
 
     comment_groups: dict[str, pd.DataFrame] = {}
     if not all_comments.empty:
-        all_comments["_base"] = all_comments["permalink"].fillna("").apply(_post_base)
+        if "_base" not in all_comments.columns:
+            all_comments["_base"] = all_comments["permalink"].fillna("").apply(_post_base)
         for base, grp in all_comments.groupby("_base"):
             comment_groups[base] = grp
 
