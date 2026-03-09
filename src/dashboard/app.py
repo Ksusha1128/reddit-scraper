@@ -707,6 +707,11 @@ def page_reviews(filtered: pd.DataFrame, search_q: str, full_df: pd.DataFrame | 
         st.info("Нет отзывов по выбранным фильтрам.")
         return
 
+    # Dedup: same permalink+text+author = real duplicate
+    _dedup_cols = [c for c in ["permalink", "text", "author"] if c in filtered.columns]
+    if _dedup_cols:
+        filtered = filtered.drop_duplicates(subset=_dedup_cols)
+
     has_src = "source" in filtered.columns
 
     # ── Build comment groups from FULL df so comments always appear with posts ──
