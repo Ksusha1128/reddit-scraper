@@ -32,8 +32,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-from src.analytics.competitor import build_comparison_table, detect_switches, get_strengths_weaknesses  # noqa: E402
-from src.analytics.pain_extractor import extract_feature_requests, extract_highlights, extract_pains  # noqa: E402
 from src.analytics.patterns import get_ngrams, get_tfidf_keywords  # noqa: E402
 from src.analytics.segments import SEGMENTS, get_segment_summary, segment_users  # noqa: E402
 from src.apps import TRACKED_APPS, get_apps_by_niche  # noqa: E402
@@ -67,10 +65,10 @@ LOGO_URL = _asset_url("photo_2026-03-08 18.03.06.jpeg")
 AUTH_GIF_URL = _asset_url("login_avatar.gif")
 
 NICHE_RU: dict[AppNiche, str] = {
-    AppNiche.RELATIONSHIPS: "💑 Отношения и ментал",
-    AppNiche.SMOKING: "🚭 Бросить курить",
-    AppNiche.PLANT_SCANNER: "🌿 Сканер растений",
-    AppNiche.CALORIE_TRACKER: "🍎 Трекер калорий",
+    AppNiche.RELATIONSHIPS: "AI Psychologist, Relationships",
+    AppNiche.SMOKING: "Quit Smoking",
+    AppNiche.PLANT_SCANNER: "Plant Scanner",
+    AppNiche.CALORIE_TRACKER: "Calorie Tracker",
 }
 NICHE_FROM_RU: dict[str, AppNiche] = {v: k for k, v in NICHE_RU.items()}
 
@@ -472,9 +470,62 @@ _CAT_MAP: dict[str, str] = {
     "Без категории": "Посты на тему",
 }
 
+# ── Strict text-based re-categorizer ──────────────────────────────────────
+_STRICT_CAT_RULES: list[tuple[str, re.Pattern]] = [
+    ("Баги и техпроблемы", re.compile(
+        r"\b(?:bug(?:s|gy)?|crash(?:es|ed|ing)?|error|freeze[sd]?|lag(?:s|gy)?|glitch(?:es|y)?|"
+        r"broken|not working|stopped working|doesn.t work|won.t (?:open|load|start)|"
+        r"update broke|sync (?:issue|problem|error)|can.t (?:login|log in|sign in|connect)|"
+        r"black screen|force close|data loss|battery drain)\b", re.I)),
+    ("Цена и подписка", re.compile(
+        r"\b(?:(?:too )?expensive|overpriced|subscription|paywall|premium|"
+        r"free (?:version|tier|plan|trial)|(?:not )?worth (?:the )?(?:price|money|paying)|"
+        r"(?:in-app |in app )?purchas|refund|billing|charged?|(?:cancel|renew)\w* (?:my |the )?(?:sub|plan|membership)|"
+        r"rip\s*off|price (?:increase|hike|went up)|hidden (?:cost|fee)|trial (?:ended|expired))\b", re.I)),
+    ("Интерфейс и дизайн", re.compile(
+        r"\b(?:(?:the |this )?(?:ui|ux|interface|layout|design) (?:is|was|looks?|feels?|needs?)|"
+        r"(?:ugly|beautiful|clean|cluttered|intuitive|confusing|sleek|modern|outdated) (?:ui|ux|interface|design|layout|app)|"
+        r"dark mode|font size|navigation (?:is|sucks|confusing)|"
+        r"button(?:s)? (?:too |are )?(?:small|big|hidden|confusing)|"
+        r"(?:hard|easy|difficult|simple) to (?:use|navigate|find)|user.?friendly)\b", re.I)),
+    ("Функции", re.compile(
+        r"\b(?:(?:this |the )?(?:feature|function|option|tool) (?:is|was|should|needs?|doesn.t)|"
+        r"(?:wish|want|need|hope) (?:it |they |the app )?(?:had|would|could|has|will) (?:add|support|include|have)|"
+        r"(?:add|added|adding|support|include) (?:a |an )?(?:feature|option|function|mode)|"
+        r"(?:can|could)(?:n.t|not) (?:do|find|use|access|export|import|customize|track)|"
+        r"missing (?:feature|option|function|setting)|"
+        r"should (?:add|have|support|include|allow))\b", re.I)),
+    ("Приватность и безопасность", re.compile(
+        r"\b(?:(?:data |user )?privacy|(?:data |personal )?(?:collect|harvest|sell|shar)(?:s|ing|ed)?|"
+        r"(?:too many |unnecessary )?permission|account (?:hack|breach|stolen|compromised)|"
+        r"(?:encrypt|secure|safety|two.?factor|2fa)|"
+        r"(?:creepy|sketchy|suspicious|shady) (?:app|permission|practice))\b", re.I)),
+    ("Пользовательский опыт", re.compile(
+        r"\b(?:(?:this |the )?app (?:is|was|has been) (?:amazing|great|terrible|awful|incredible|life.?changing|helpful|useless|garbage|trash|worst|best)|"
+        r"(?:love|hate|enjoy|recommend|regret|adore) (?:this |the )?app|"
+        r"game.?changer|life.?saver|(?:highly |would |definitely )?recommend|"
+        r"(?:saved|changed|ruined|improved|transformed) (?:my |our )|"
+        r"(?:uninstall|delet)(?:ed|ing) (?:the |this )?app|"
+        r"(?:switched|moving|moved) (?:to|from|away))\b", re.I)),
+    ("Потребности", re.compile(
+        r"\b(?:(?:looking|searching|need|want) (?:for )?(?:a |an )?(?:app|tool|alternative|replacement|something)|"
+        r"(?:any(?:one)? |does anyone )?(?:know|recommend|suggest) (?:a |an )?(?:good |better )?(?:app|tool|alternative)|"
+        r"(?:is there |are there )(?:a |any )?(?:app|tool|alternative)(?:s)?|"
+        r"what (?:app|tool) (?:do you|should i|can i))\b", re.I)),
+]
+
+def _strict_categorize(text: str) -> str:
+    """Categorize text strictly — only if pattern matches in app-relevant context."""
+    text_s = str(text)
+    for cat_name, pattern in _STRICT_CAT_RULES:
+        if pattern.search(text_s):
+            return cat_name
+    return "Посты на тему"
+
 def _normalize_categories(df: pd.DataFrame) -> pd.DataFrame:
-    if "primary_category" in df.columns:
-        df["primary_category"] = df["primary_category"].map(_CAT_MAP).fillna("Посты на тему")
+    """Re-categorize all rows using strict text-based rules."""
+    if "text" in df.columns:
+        df["primary_category"] = df["text"].fillna("").apply(_strict_categorize)
     return df
 
 def _add_niche(df: pd.DataFrame) -> pd.DataFrame:
@@ -828,13 +879,77 @@ def _render_comment(cr: pd.Series, search_q: str) -> None:
 #  PAGE 2: ANALYTICS
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _render_review_row(row: pd.Series, idx: int) -> str:
+    """Render one review row as HTML with Reddit link, sentiment pill, app tag."""
+    text = str(row.get("text", ""))[:300]
+    author = row.get("author", "?")
+    sent = row.get("sentiment_label", "")
+    date_s = row["date"].strftime("%d.%m.%Y") if pd.notna(row.get("date")) else ""
+    link = row.get("permalink", "")
+    app = row.get("app_name", "")
+    src = row.get("source", "post")
+    icon = "💬" if src == "comment" else "📄"
+    link_html = f' <a href="{link}" target="_blank" class="ulink">🔗 Reddit</a>' if link else ""
+    return (
+        f'<div class="cm-block">'
+        f'<div class="cm-meta">{icon} <span class="cm-author">u/{_esc(str(author))}</span> '
+        f'{date_s} {_pill_sent(sent)} {_pill_app(app)}{link_html}</div>'
+        f'<div class="cm-text">{_esc(text)}</div>'
+        f'</div>'
+    )
+
+
+def _analytics_expander_block(title: str, rows_df: pd.DataFrame, key_prefix: str, max_show: int = 10) -> None:
+    """Render an expandable block with review rows + Reddit links."""
+    n = len(rows_df)
+    with st.expander(f"{title} — {n} posts", expanded=False):
+        show = rows_df.head(max_show)
+        parts = []
+        for idx, (_, row) in enumerate(show.iterrows()):
+            parts.append(_render_review_row(row, idx))
+        if n > max_show:
+            parts.append(f'<div style="color:var(--g-text-secondary);font-size:.8rem;padding:8px 0">...and {n - max_show} more</div>')
+        st.markdown("\n".join(parts), unsafe_allow_html=True)
+
+
 def page_analytics(filtered: pd.DataFrame) -> None:
     if filtered.empty:
         st.info("No data for analytics.")
         return
 
-    # Deduplicate for accurate counting: same permalink = same content
-    deduped = filtered.drop_duplicates(subset="permalink") if "permalink" in filtered.columns else filtered
+    # Deduplicate: same permalink+text+author = real duplicate, but keep different comments under same post
+    dedup_cols = [c for c in ["permalink", "text", "author"] if c in filtered.columns]
+    deduped = filtered.drop_duplicates(subset=dedup_cols) if dedup_cols else filtered
+
+    # ── Split: about apps vs niche discussions ──
+    _APP_SIGNAL = re.compile(
+        r"\b(?:app|application|downloaded|installed|uninstalled|subscription|premium|"
+        r"free version|interface|ui|ux|notification|feature|update|bug|crash|glitch|"
+        r"tracking|tracker|log|sync|dark mode|widget|tutorial|onboarding)\b", re.I
+    )
+    # Build set of known app names for matching
+    _known_apps_lower = set()
+    _real_mask = ~deduped["app_name"].str.startswith("[", na=False)
+    for a in deduped.loc[_real_mask, "app_name"].unique():
+        _known_apps_lower.add(str(a).lower())
+        # also add without special chars: "Lose It!" -> "lose it"
+        _known_apps_lower.add(re.sub(r"[^a-z0-9 ]", "", str(a).lower()).strip())
+
+    def _is_about_app(row):
+        text_lower = str(row.get("text", "")).lower()
+        # 1) text mentions a known app name
+        for app_l in _known_apps_lower:
+            if len(app_l) > 2 and app_l in text_lower:
+                return True
+        # 2) text mentions generic app-related words
+        if _APP_SIGNAL.search(text_lower):
+            return True
+        return False
+
+    deduped = deduped.copy()
+    deduped["_about_app"] = deduped.apply(_is_about_app, axis=1)
+    app_data = deduped[deduped["_about_app"]]     # posts/comments about apps
+    niche_data = deduped[~deduped["_about_app"]]   # general niche discussions
 
     total = len(deduped)
     texts = deduped["text"].fillna("").tolist()
@@ -843,23 +958,24 @@ def page_analytics(filtered: pd.DataFrame) -> None:
     n_pos = len(deduped[deduped["sentiment_label"] == "positive"]) if "sentiment_label" in deduped.columns else 0
     n_neg = len(deduped[deduped["sentiment_label"] == "negative"]) if "sentiment_label" in deduped.columns else 0
     n_neu = total - n_pos - n_neg
-    n_apps = filtered["app_name"].nunique()  # apps from full set (not deduped)
+    n_apps = filtered["app_name"].nunique()
     n_authors = deduped["author"].nunique() if "author" in deduped.columns else 0
     n_posts = len(deduped[deduped["source"] == "post"]) if "source" in deduped.columns else total
     n_comments = len(deduped[deduped["source"] == "comment"]) if "source" in deduped.columns else 0
 
-    k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
+    k1, k2, k3, k4, k5, k6, k7, k8 = st.columns(8)
     k1.metric("Total", total)
-    k2.metric("📄 Posts", n_posts)
-    k3.metric("💬 Comments", n_comments)
-    k4.metric("😊 Positive", n_pos)
-    k5.metric("😞 Negative", n_neg)
-    k6.metric("📱 Apps", n_apps)
-    k7.metric("👤 Authors", n_authors)
+    k2.metric("About Apps", len(app_data))
+    k3.metric("Niche Talk", len(niche_data))
+    k4.metric("Posts", n_posts)
+    k5.metric("Comments", n_comments)
+    k6.metric("Positive", n_pos)
+    k7.metric("Negative", n_neg)
+    k8.metric("Apps", n_apps)
 
     st.markdown("---")
 
-    # Sentiment by app (deduped, exclude General)
+    # ── Sentiment by app ──
     st.markdown("##### Sentiment by App")
     if "sentiment_label" in deduped.columns:
         _no_gen = deduped[~deduped["app_name"].isin(["General", "General / Общее"])]
@@ -878,86 +994,171 @@ def page_analytics(filtered: pd.DataFrame) -> None:
             fig.update_layout(**PLOTLY_LAYOUT, height=max(len(app_sent) * 28, 200), yaxis=dict(autorange="reversed"), xaxis_title="Avg sentiment")
             st.plotly_chart(fig, use_container_width=True)
 
-    # Stacked sentiment (deduped, exclude General)
-    st.markdown("##### Sentiment Distribution")
-    if "sentiment_label" in deduped.columns:
-        _no_gen2 = deduped[~deduped["app_name"].isin(["General", "General / Общее"])]
-        apps_bar = _no_gen2["app_name"].value_counts()
-        apps_bar = apps_bar[apps_bar >= 2].head(15).index.tolist()
-        if apps_bar:
-            bar_data = _no_gen2[_no_gen2["app_name"].isin(apps_bar)]
-            sent_counts = bar_data.groupby(["app_name", "sentiment_label"]).size().reset_index(name="count")
-            fig = go.Figure()
-            cm = {"positive": C_GREEN, "negative": C_RED, "neutral": C_YELLOW}
-            lm = {"positive": "😊 Positive", "negative": "😞 Negative", "neutral": "😐 Neutral"}
-            for sv in ["positive", "neutral", "negative"]:
-                d = sent_counts[sent_counts["sentiment_label"] == sv]
-                if not d.empty:
-                    fig.add_trace(go.Bar(y=d["app_name"], x=d["count"], name=lm.get(sv, sv), marker_color=cm.get(sv, C_BLUE), orientation="h"))
-            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(apps_bar) * 30, 200), barmode="stack", yaxis=dict(autorange="reversed"), legend=dict(orientation="h", y=1.05, x=0))
-            st.plotly_chart(fig, use_container_width=True)
-
     st.markdown("---")
 
-    # Praise vs Complaints
+    # ── What People Like / Complaints ──
+    st.markdown("##### What People Like / Complaints")
+
+    # Use app_data (already filtered to posts about apps)
+
+    # --- Positive: what people LIKE about apps, by theme ---
+    # Keywords are PHRASES to avoid false positives
+    _LIKE_CATEGORIES: dict[str, list[re.Pattern]] = {
+        "Удобство и простота": [
+            re.compile(r"\b(?:easy to use|user.friendly|simple to|intuitive|clean interface|smooth experience|well designed app)\b", re.I),
+        ],
+        "Функциональность": [
+            re.compile(r"\b(?:great feature|useful feature|love the (?:feature|tracking|log)|accurate (?:track|data|count|scan)|good (?:tracking|logging|scanner))\b", re.I),
+        ],
+        "Мотивация и поддержка": [
+            re.compile(r"\b(?:motivat(?:es|ed|ing)|streak|milestone|achievement|badge|reward|community|support(?:ive|ing))\b", re.I),
+        ],
+        "Результат и эффект": [
+            re.compile(r"\b(?:helped me|saved my|changed my|life.?changer|game.?changer|works great|actually work|really help)\b", re.I),
+        ],
+        "Цена — доволен": [
+            re.compile(r"\b(?:worth (?:the|every) (?:money|penny|cent|price)|good value|affordable|free (?:version|app) (?:is|works)|reasonable price)\b", re.I),
+        ],
+        "Дизайн и UI": [
+            re.compile(r"\b(?:beautiful (?:app|design|ui|interface)|gorgeous|nice design|great ui|looks great|love the (?:design|look|aesthetic|theme))\b", re.I),
+        ],
+    }
+    # --- Negative: complaints about apps, by theme ---
+    _COMPLAINT_CATEGORIES: dict[str, list[re.Pattern]] = {
+        "Цена и подписка": [
+            re.compile(r"\b(?:(?:too )?expensive|overpriced|paywall|pay.?wall|not worth (?:the|it)|money grab|rip.?off|subscription (?:is|costs?|price)|premium (?:only|is)|(?:raised|increased) (?:the )?price|in.app purchase)\b", re.I),
+        ],
+        "Баги и техпроблемы": [
+            re.compile(r"\b(?:crash(?:es|ed|ing)|bug(?:gy|s)?|glitch(?:y|es)?|freez(?:es|ing)|lag(?:gy|s|ging)?|(?:not|won't|doesn't) (?:load|open|work|sync|start|connect)|(?:update|latest version) broke|force close|black screen|error (?:message|code|when))\b", re.I),
+        ],
+        "Плохой UX / дизайн": [
+            re.compile(r"\b(?:confusing (?:ui|interface|app|layout|design)|hard to (?:use|navigate|find)|bad (?:interface|design|ui|ux)|unintuitive|cluttered|too many (?:steps|clicks|taps)|(?:not|isn't) user.friendly|terrible (?:ui|ux|design|interface))\b", re.I),
+        ],
+        "Неточность данных": [
+            re.compile(r"\b(?:inaccurate|(?:wrong|incorrect) (?:data|calories?|info|result|identification|plant)|not accurate|bad database|missing (?:food|items?|plants?)|misidentif|false positive)\b", re.I),
+        ],
+        "Приватность": [
+            re.compile(r"\b(?:privacy (?:concern|issue|policy)|(?:data|user) (?:collection|harvesting|selling)|track(?:ing|s) (?:me|my|user)|suspicious permission|(?:steals?|sells?) (?:my |your )?data)\b", re.I),
+        ],
+        "Не хватает функций": [
+            re.compile(r"\b(?:missing feature|(?:doesn't|doesn t|does not) (?:have|support)|wish (?:it|the app) had|would be (?:nice|great) (?:if|to)|(?:need|needs) (?:a |more )?(?:feature|option|support)|limited feature|basic feature missing)\b", re.I),
+        ],
+        "Навязчивость и реклама": [
+            re.compile(r"\b(?:too many (?:notification|ad|pop.?up)|spam(?:my|ming)?|(?:annoying|constant|endless) (?:notification|ad|pop.?up)|full of ads|ad.?ridden|(?:push|forced) notification)\b", re.I),
+        ],
+    }
+
     c_l, c_r = st.columns(2)
     with c_l:
-        st.markdown("##### 😊 What People Like")
-        highlights = extract_highlights(texts, apps)
-        if highlights:
-            for h in highlights[:8]:
-                st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_GREEN}">{_esc(h.text)}</b> — {h.count} mentions'
-                    + "".join(f'<div class="pain-quote">{_esc(e[:200])}</div>' for e in h.examples[:2])
-                    + (f'<div class="pain-apps">📱 {", ".join(h.apps[:5])}</div>' if h.apps else "")
-                    + '</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:1.05rem;font-weight:600;color:{C_GREEN};margin-bottom:8px">What People Like</div>', unsafe_allow_html=True)
+        pos_rows = app_data[app_data["sentiment_label"] == "positive"] if "sentiment_label" in app_data.columns else pd.DataFrame()
+        if not pos_rows.empty:
+            for cat_name, patterns in _LIKE_CATEGORIES.items():
+                matched_idx = []
+                for df_idx, row in pos_rows.iterrows():
+                    txt = str(row.get("text", ""))
+                    if any(p.search(txt) for p in patterns):
+                        matched_idx.append(df_idx)
+                if matched_idx:
+                    cat_df = pos_rows.loc[matched_idx].sort_values("sentiment_score", ascending=False)
+                    _analytics_expander_block(f"{cat_name} — {len(cat_df)}", cat_df, f"pos_{cat_name}", max_show=8)
         else:
-            st.info("No data")
+            st.info("No positive reviews")
+
     with c_r:
-        st.markdown("##### 😤 Complaints")
-        pains = extract_pains(texts, apps)
-        if pains:
-            for p in pains[:8]:
-                st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_RED}">{_esc(p.text)}</b> — {p.count} mentions'
-                    + "".join(f'<div class="pain-quote">{_esc(e[:200])}</div>' for e in p.examples[:2])
-                    + (f'<div class="pain-apps">📱 {", ".join(p.apps[:5])}</div>' if p.apps else "")
-                    + '</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:1.05rem;font-weight:600;color:{C_RED};margin-bottom:8px">Complaints</div>', unsafe_allow_html=True)
+        neg_rows = app_data[app_data["sentiment_label"] == "negative"] if "sentiment_label" in app_data.columns else pd.DataFrame()
+        if not neg_rows.empty:
+            for cat_name, patterns in _COMPLAINT_CATEGORIES.items():
+                matched_idx = []
+                for df_idx, row in neg_rows.iterrows():
+                    txt = str(row.get("text", ""))
+                    if any(p.search(txt) for p in patterns):
+                        matched_idx.append(df_idx)
+                if matched_idx:
+                    cat_df = neg_rows.loc[matched_idx].sort_values("sentiment_score", ascending=True)
+                    _analytics_expander_block(f"{cat_name} — {len(cat_df)}", cat_df, f"neg_{cat_name}", max_show=8)
         else:
-            st.info("No data")
+            st.info("No negative reviews")
 
     st.markdown("---")
 
-    # Feature requests
-    st.markdown("##### 💡 Feature Requests")
-    freqs = extract_feature_requests(texts, apps)
-    if freqs:
+    # ── Feature Requests — strict: must mention an app and request a feature ──
+    st.markdown("##### Feature Requests")
+    # Build set of known app names for text matching
+    _known_apps_set = set(app_data["app_name"].dropna().unique())
+    _app_patterns = {app: re.compile(re.escape(app), re.I) for app in _known_apps_set if len(app) > 2}
+
+    # Stricter feature patterns — must be about app features
+    _strict_fr = [
+        re.compile(r"\bi\s+wish\s+(?:the\s+app|this\s+app|it)\s+(?:had|could|would)\s+(.{10,80}?)(?:[.\n!?]|$)", re.I),
+        re.compile(r"\bwould\s+(?:be\s+)?(?:nice|great|cool)\s+(?:if\s+(?:the\s+app|it|they)\s+)(.{10,80}?)(?:[.\n!?]|$)", re.I),
+        re.compile(r"\b(?:they|the app|it|devs?)\s+should\s+(?:add|have|include|support|fix|improve)\s+(.{10,80}?)(?:[.\n!?]|$)", re.I),
+        re.compile(r"\bplease\s+(?:add|fix|update|improve)\s+(.{10,80}?)(?:[.\n!?]|$)", re.I),
+        re.compile(r"\bneed(?:s)?\s+(?:a|an|to\s+add|to\s+have|better)\s+(.{10,80}?)(?:[.\n!?]|$)", re.I),
+        re.compile(r"\bmissing\s+(?:feature|option|setting|function|support)\b", re.I),
+        re.compile(r"\blacking\s+(?:feature|option|support|function)\b", re.I),
+    ]
+
+    fr_indices: list[int] = []
+    for df_idx, row in app_data.iterrows():
+        text = str(row.get("text", ""))
+        app = str(row.get("app_name", ""))
+        # Text must mention the app name OR the row is already tagged to an app
+        has_app_context = any(p.search(text) for p in _app_patterns.values()) or (app in _known_apps_set)
+        if has_app_context:
+            for pat in _strict_fr:
+                if pat.search(text):
+                    fr_indices.append(df_idx)
+                    break
+    if fr_indices:
+        fr_df = app_data.loc[fr_indices]
+        fr_apps = fr_df["app_name"].value_counts().head(10)
         cols_fr = st.columns(2)
-        for i, f in enumerate(freqs[:10]):
+        for i, (app_name, cnt) in enumerate(fr_apps.items()):
             with cols_fr[i % 2]:
-                st.markdown(
-                    f'<div class="pain-card"><b style="color:{C_BLUE}">{_esc(f.text)}</b> — {f.count} mentions'
-                    + "".join(f'<div class="pain-quote">{_esc(e[:150])}</div>' for e in f.examples[:2])
-                    + '</div>', unsafe_allow_html=True)
+                app_fr = fr_df[fr_df["app_name"] == app_name]
+                _analytics_expander_block(f"{app_name} — {cnt} requests", app_fr, f"fr_{app_name}", max_show=6)
+    else:
+        st.info("No feature requests found")
 
     st.markdown("---")
 
-    # Categories (deduped)
-    st.markdown("##### 📂 Topics — Categories")
-    if "primary_category" in deduped.columns:
-        cat_counts = deduped["primary_category"].value_counts().head(12)
-        if not cat_counts.empty:
-            fig = go.Figure(go.Bar(
-                x=cat_counts.values, y=cat_counts.index, orientation="h",
-                marker_color=C_TEAL, text=cat_counts.values, textposition="outside",
-            ))
-            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(cat_counts) * 28, 200), yaxis=dict(autorange="reversed"))
+    # ── Topics — Categories with sentiment breakdown ──
+    st.markdown("##### Topics — Categories")
+    if "primary_category" in app_data.columns:
+        cat_sent = app_data.groupby(["primary_category", "sentiment_label"]).size().reset_index(name="count")
+        cat_totals = app_data["primary_category"].value_counts().head(15)
+        if not cat_totals.empty:
+            cats_order = cat_totals.index.tolist()
+            fig = go.Figure()
+            cm = {"positive": C_GREEN, "negative": C_RED, "neutral": C_YELLOW}
+            lm = {"positive": "Positive", "negative": "Negative", "neutral": "Neutral"}
+            for sv in ["positive", "neutral", "negative"]:
+                d = cat_sent[cat_sent["sentiment_label"] == sv]
+                d = d[d["primary_category"].isin(cats_order)]
+                if not d.empty:
+                    fig.add_trace(go.Bar(
+                        y=d["primary_category"], x=d["count"],
+                        name=lm.get(sv, sv), marker_color=cm.get(sv, C_BLUE), orientation="h"
+                    ))
+            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(cats_order) * 32, 200),
+                            barmode="stack", yaxis=dict(categoryorder="array", categoryarray=cats_order[::-1]),
+                            legend=dict(orientation="h", y=1.05, x=0))
             st.plotly_chart(fig, use_container_width=True)
 
+            # Expandable reviews per category
+            for cat in cats_order[:12]:
+                cat_df = app_data[app_data["primary_category"] == cat]
+                n_p = len(cat_df[cat_df["sentiment_label"] == "positive"]) if "sentiment_label" in cat_df.columns else 0
+                n_n = len(cat_df[cat_df["sentiment_label"] == "negative"]) if "sentiment_label" in cat_df.columns else 0
+                label = f"{cat} — {len(cat_df)} (pos {n_p} / neg {n_n})"
+                _analytics_expander_block(label, cat_df, f"cat_{cat}", max_show=8)
+
     st.markdown("---")
 
-    # Demographics (deduped)
-    st.markdown("##### 🚻 Demographics (heuristic)")
+    # ── Demographics ──
+    st.markdown("##### Demographics (heuristic)")
     _male_re = re.compile(r"\b(?:my wife|my girlfriend|as a (?:man|guy|husband|dad|father|boyfriend|bf)|(?:i'm|im) a (?:guy|man|dude))\b", re.I)
     _female_re = re.compile(r"\b(?:my husband|my boyfriend|as a (?:woman|girl|wife|mom|mother|girlfriend|gf)|(?:i'm|im) a (?:girl|woman|lady))\b", re.I)
     male_n = int(deduped["text"].fillna("").str.contains(_male_re).sum())
@@ -990,47 +1191,116 @@ def page_analytics(filtered: pd.DataFrame) -> None:
 
     st.markdown("---")
 
-    # Strengths / weaknesses
-    st.markdown("##### ⚔️ Strengths vs Weaknesses")
-    sw = get_strengths_weaknesses(deduped)
-    if sw:
-        for app_name, data in sorted(sw.items()):
-            if not data["strengths"] and not data["weaknesses"]:
-                continue
-            with st.expander(f"📱 {app_name}"):
-                sc1, sc2 = st.columns(2)
-                with sc1:
-                    st.markdown("**✅ Pros:**")
-                    for s in data["strengths"][:5]:
-                        st.markdown(f"• {s}")
-                with sc2:
-                    st.markdown("**❌ Cons:**")
-                    for w in data["weaknesses"][:5]:
-                        st.markdown(f"• {w}")
+    # ── Strengths vs Weaknesses — per app with real reviews ──
+    st.markdown("##### Strengths vs Weaknesses")
+    _no_gen_sw = app_data[~app_data["app_name"].isin(["General", "General / Общее"])]
+    app_counts_sw = _no_gen_sw["app_name"].value_counts()
+    top_apps_sw = app_counts_sw[app_counts_sw >= 5].head(15).index.tolist()
+
+    for app_name in top_apps_sw:
+        app_df = _no_gen_sw[_no_gen_sw["app_name"] == app_name]
+        n_total = len(app_df)
+        pos_df = app_df[app_df["sentiment_label"] == "positive"] if "sentiment_label" in app_df.columns else pd.DataFrame()
+        neg_df = app_df[app_df["sentiment_label"] == "negative"] if "sentiment_label" in app_df.columns else pd.DataFrame()
+        n_p = len(pos_df)
+        n_n = len(neg_df)
+        with st.expander(f"{app_name} — {n_total} total (pos {n_p} / neg {n_n})", expanded=False):
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                st.markdown(f'<div style="color:{C_GREEN};font-weight:600;margin-bottom:4px">Strengths ({n_p})</div>', unsafe_allow_html=True)
+                if not pos_df.empty:
+                    parts = []
+                    for _, row in pos_df.sort_values("sentiment_score", ascending=False).head(5).iterrows():
+                        parts.append(_render_review_row(row, 0))
+                    st.markdown("\n".join(parts), unsafe_allow_html=True)
+                else:
+                    st.info("No positive reviews")
+            with sc2:
+                st.markdown(f'<div style="color:{C_RED};font-weight:600;margin-bottom:4px">Weaknesses ({n_n})</div>', unsafe_allow_html=True)
+                if not neg_df.empty:
+                    parts = []
+                    for _, row in neg_df.sort_values("sentiment_score", ascending=True).head(5).iterrows():
+                        parts.append(_render_review_row(row, 0))
+                    st.markdown("\n".join(parts), unsafe_allow_html=True)
+                else:
+                    st.info("No negative reviews")
 
     st.markdown("---")
 
-    # Switches
-    st.markdown("##### 🔄 App Switches")
-    authors_list = deduped["author"].fillna("").tolist() if "author" in deduped.columns else None
-    switches = detect_switches(texts, authors_list)
-    if switches:
-        sw_data = [{"From": s.from_app, "To": s.to_app, "Reason": s.reason[:100]} for s in switches[:15]]
-        st.dataframe(pd.DataFrame(sw_data), hide_index=True, use_container_width=True)
+    # ── App Switches — real app-to-app transitions ──
+    st.markdown("##### App Switches")
+    # Find posts where users mention switching FROM one app TO another
+    known_apps = set(app_data["app_name"].dropna().unique()) if "app_name" in app_data.columns else set()
+    known_apps = {a for a in known_apps if len(a) > 2 and not a.startswith("[")}
+    _switch_re = re.compile(
+        r"\b(?:switched?|moved?|migrated?|went|came|changed?)\s+"
+        r"(?:from|over\s+from|away\s+from)\s+(.+?)\s+"
+        r"(?:to|over\s+to)\s+(.+?)(?:\s|[.,!?;]|$)",
+        re.I
+    )
+    _switch_re2 = re.compile(
+        r"\b(?:left|quit|dropped|ditched|uninstalled?)\s+(.+?)\s+"
+        r"(?:for|and\s+(?:now\s+)?(?:use|using|switched?\s+to))\s+(.+?)(?:\s|[.,!?;]|$)",
+        re.I
+    )
 
-    st.markdown("---")
+    switch_rows: list[dict] = []
+    for _, row in app_data.iterrows():
+        text = str(row.get("text", ""))
+        link = row.get("permalink", "")
+        for pat in [_switch_re, _switch_re2]:
+            m = pat.search(text)
+            if m:
+                from_raw = m.group(1).strip().rstrip(".,!?;")[:60]
+                to_raw = m.group(2).strip().rstrip(".,!?;")[:60]
+                # At least one side must be a known app
+                from_match = None
+                to_match = None
+                for app in known_apps:
+                    if app.lower() in from_raw.lower():
+                        from_match = app
+                    if app.lower() in to_raw.lower():
+                        to_match = app
+                if from_match or to_match:
+                    switch_rows.append({
+                        "from": from_match or from_raw,
+                        "to": to_match or to_raw,
+                        "text": text[:200].replace("\n", " "),
+                        "link": link,
+                    })
+                    break
 
-    # Top subreddits
-    st.markdown("##### 🏠 Subreddits")
-    if "subreddit" in deduped.columns:
-        top_subs = deduped["subreddit"].value_counts().head(10)
-        if not top_subs.empty:
-            fig = go.Figure(go.Bar(x=top_subs.values, y=top_subs.index, orientation="h", marker_color=C_TEAL))
-            fig.update_layout(**PLOTLY_LAYOUT, height=max(len(top_subs) * 26, 150), yaxis=dict(autorange="reversed"))
-            st.plotly_chart(fig, use_container_width=True)
+    if switch_rows:
+        sw_html_rows = []
+        for s in switch_rows[:30]:
+            link_html = f'<a href="{s["link"]}" target="_blank" class="ulink">Reddit</a>' if s["link"] else ""
+            sw_html_rows.append(
+                f'<tr style="border-bottom:1px solid #30363d">'
+                f'<td style="padding:8px;color:{C_RED};font-weight:600;white-space:nowrap">{_esc(s["from"])}</td>'
+                f'<td style="padding:8px;font-size:1.1rem;text-align:center">→</td>'
+                f'<td style="padding:8px;color:{C_GREEN};font-weight:600;white-space:nowrap">{_esc(s["to"])}</td>'
+                f'<td style="padding:8px;font-size:.82rem;color:#8b949e">{_esc(s["text"][:160])}</td>'
+                f'<td style="padding:8px">{link_html}</td>'
+                f'</tr>'
+            )
+        table_html = (
+            '<table style="width:100%;border-collapse:collapse">'
+            '<tr style="border-bottom:2px solid #30363d">'
+            '<th style="text-align:left;padding:8px;color:#8b949e;font-size:.8rem">From</th>'
+            '<th></th>'
+            '<th style="text-align:left;padding:8px;color:#8b949e;font-size:.8rem">To</th>'
+            '<th style="text-align:left;padding:8px;color:#8b949e;font-size:.8rem">Context</th>'
+            '<th style="text-align:left;padding:8px;color:#8b949e;font-size:.8rem">Link</th>'
+            '</tr>'
+            + "\n".join(sw_html_rows)
+            + '</table>'
+        )
+        st.markdown(table_html, unsafe_allow_html=True)
+    else:
+        st.info("No app switches found")
 
-    # N-grams
-    with st.expander("📊 Bigrams & TF-IDF"):
+    # ── N-grams ──
+    with st.expander("Bigrams & TF-IDF"):
         ac1, ac2 = st.columns(2)
         with ac1:
             bigrams = get_ngrams(texts, n=2, top_k=12)
@@ -1046,6 +1316,22 @@ def page_analytics(filtered: pd.DataFrame) -> None:
                 fig = go.Figure(go.Bar(x=tf_df["Weight"], y=tf_df["Word"], orientation="h", marker_color=C_BLUE))
                 fig.update_layout(**PLOTLY_LAYOUT, height=300, yaxis=dict(autorange="reversed"), title="TF-IDF")
                 st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Niche Discussions — general talk NOT about specific apps ──
+    if len(niche_data) > 0:
+        st.markdown("##### Niche Discussions")
+        st.caption(f"Posts and comments about the niche in general, not specifically about apps ({len(niche_data)} total)")
+        # Group by sentiment
+        for sent_label, sent_color, sent_title in [
+            ("negative", C_RED, "Pain Points & Frustrations"),
+            ("positive", C_GREEN, "Positive Experiences"),
+            ("neutral", C_YELLOW, "General Discussions"),
+        ]:
+            sent_df = niche_data[niche_data["sentiment_label"] == sent_label] if "sentiment_label" in niche_data.columns else pd.DataFrame()
+            if not sent_df.empty:
+                _analytics_expander_block(f"{sent_title} — {len(sent_df)}", sent_df.head(50), f"niche_{sent_label}", max_show=10)
 
     st.markdown("---")
     ec1, ec2, _ = st.columns([1, 1, 6])
